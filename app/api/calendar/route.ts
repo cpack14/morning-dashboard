@@ -63,21 +63,30 @@ export async function GET() {
         if (!startRaw || !endRaw || !item.id) continue;
 
         const allDay = Boolean(item.start?.date && !item.start?.dateTime);
-        const dayKey = allDay
-          ? startRaw
-          : dayKeyInTimezone(new Date(startRaw));
 
-        if (dayKey !== todayKey && dayKey !== tomorrowKey) continue;
+        const pushEvent = (day: "today" | "tomorrow") => {
+          events.push({
+            id: item.id!,
+            title: item.summary ?? "(no title)",
+            start: startRaw,
+            end: endRaw,
+            allDay,
+            calendar: key,
+            day,
+          });
+        };
 
-        events.push({
-          id: item.id,
-          title: item.summary ?? "(no title)",
-          start: startRaw,
-          end: endRaw,
-          allDay,
-          calendar: key,
-          day: dayKey === todayKey ? "today" : "tomorrow",
-        });
+        if (allDay) {
+          // Multi-day all-day events: end date is exclusive (Google's
+          // convention), so check whether today/tomorrow fall anywhere
+          // in [start, end) rather than only matching the start date.
+          if (startRaw <= todayKey && todayKey < endRaw) pushEvent("today");
+          if (startRaw <= tomorrowKey && tomorrowKey < endRaw) pushEvent("tomorrow");
+        } else {
+          const dayKey = dayKeyInTimezone(new Date(startRaw));
+          if (dayKey === todayKey) pushEvent("today");
+          else if (dayKey === tomorrowKey) pushEvent("tomorrow");
+        }
       }
     } catch (error) {
       errors[key] = (error as Error).message;
