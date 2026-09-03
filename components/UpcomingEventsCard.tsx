@@ -37,7 +37,7 @@ function formatTimeLabel(event: UpcomingEvent) {
 function UpcomingRow({ event }: { event: UpcomingEvent }) {
   return (
     <li className="flex items-baseline gap-[0.5em] overflow-hidden">
-      <span className="w-[4.5em] shrink-0 text-muted tabular-nums">
+      <span className="w-[5.5em] shrink-0 whitespace-nowrap text-muted tabular-nums">
         {formatDateLabel(new Date(event.start))}
       </span>
       <span className="w-[4.5em] shrink-0 text-muted tabular-nums">
