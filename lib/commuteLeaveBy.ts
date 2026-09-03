@@ -25,7 +25,7 @@ export async function computeLeaveBy(
   const arriveAt = new Date(
     targetStart.getTime() - ARRIVAL_BUFFER_MINUTES * 60 * 1000,
   );
-  const url = `https://api.tomtom.com/routing/1/calculateRoute/${origin}:${destinationCoords}/json?key=${tomtomKey}&arriveAt=${arriveAt.toISOString()}&computeTravelTimeFor=all`;
+  const url = `https://api.tomtom.com/routing/1/calculateRoute/${origin}:${destinationCoords}/json?key=${tomtomKey}&arriveAt=${arriveAt.toISOString()}&computeTravelTimeFor=all&sectionType=traffic`;
 
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`TomTom returned ${res.status}`);
@@ -36,10 +36,7 @@ export async function computeLeaveBy(
   const travelTimeMinutes = Math.round(summary.travelTimeInSeconds / 60);
   const distanceMiles = Math.round((summary.lengthInMeters / 1609.34) * 10) / 10;
   const leaveBy = new Date(summary.departureTime);
-
-  const freeFlow = summary.noTrafficTravelTimeInSeconds as number;
-  const predicted = summary.historicTrafficTravelTimeInSeconds as number;
-  const trafficCondition = classifyTraffic((predicted - freeFlow) / 60, freeFlow / 60);
+  const trafficCondition = classifyTraffic(data.routes?.[0]?.sections ?? []);
 
   return { leaveBy, travelTimeMinutes, distanceMiles, trafficCondition };
 }

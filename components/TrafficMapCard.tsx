@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, Unavailable } from "@/components/Card";
 import { useFetchPoll } from "@/lib/useFetchPoll";
+import { classifyTraffic } from "@/lib/trafficCondition";
 import type * as TT from "@tomtom-international/web-sdk-maps";
 
 const REFRESH_MS = 5 * 60 * 1000;
@@ -20,12 +21,13 @@ const DESTINATION_EMOJI: Record<string, string> = {
   church: "⛪",
 };
 
-// TomTom's traffic sections report a 0-4 magnitude: 0 unknown, 1 minor,
-// 2 moderate, 3 major, 4 undefined (usually a closure). Minor/unknown
-// isn't worth calling out — the route just stays its normal blue there.
+// Reuses the same classifier the Current Commute card's traffic label
+// is built from, so a segment is never colored here in a way that
+// contradicts what that label says.
 function delayColor(magnitude: number | undefined): string | undefined {
-  if (magnitude === 2) return MODERATE_DELAY_COLOR;
-  if (magnitude !== undefined && magnitude >= 3) return SEVERE_DELAY_COLOR;
+  const condition = classifyTraffic([{ sectionType: "traffic", magnitudeOfDelay: magnitude }]);
+  if (condition === "heavy") return SEVERE_DELAY_COLOR;
+  if (condition === "moderate") return MODERATE_DELAY_COLOR;
   return undefined;
 }
 
@@ -256,7 +258,7 @@ export function TrafficMapCard() {
 
   if (!apiKey || !homeCoords) {
     return (
-      <Card title="Traffic">
+      <Card title="Current Traffic">
         <Unavailable reason="NEXT_PUBLIC_TOMTOM_API_KEY / NEXT_PUBLIC_HOME_COORDS not configured" />
       </Card>
     );
@@ -264,14 +266,14 @@ export function TrafficMapCard() {
 
   if (!plan) {
     return (
-      <Card title="Traffic">
+      <Card title="Current Traffic">
         <Unavailable reason="loading" />
       </Card>
     );
   }
 
   return (
-    <Card title="Traffic">
+    <Card title="Current Traffic">
       <div className="flex h-full flex-col">
         {error && (
           <p className="text-label shrink-0 pb-[0.5vh] text-accent-warn">
