@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { HOME_TIMEZONE } from "@/lib/workout";
+import { dayKeyInTimezone, hourInTimezone, isWeekend } from "@/lib/timezone";
 import { fetchGoogleCalendarEvents } from "@/lib/googleCalendar";
 import { computeLeaveBy } from "@/lib/commuteLeaveBy";
 
@@ -11,28 +12,6 @@ const DEFAULT_WEEKDAY_WAKE_HOUR = 8;
 
 type CalendarKey = "work" | "personal";
 type TimedMeeting = { start: Date; calendar: CalendarKey };
-
-function dayKeyInTimezone(date: Date) {
-  return date.toLocaleDateString("en-CA", { timeZone: HOME_TIMEZONE });
-}
-
-function hourInTimezone(date: Date) {
-  return Number(
-    date.toLocaleString("en-US", {
-      timeZone: HOME_TIMEZONE,
-      hour: "numeric",
-      hour12: false,
-    }),
-  );
-}
-
-function isWeekend(date: Date) {
-  const weekday = date.toLocaleDateString("en-US", {
-    timeZone: HOME_TIMEZONE,
-    weekday: "short",
-  });
-  return weekday === "Sat" || weekday === "Sun";
-}
 
 // Converts a wall-clock time in the given IANA timezone to the correct
 // UTC instant, accounting for DST.
@@ -144,7 +123,10 @@ export async function GET() {
   }
 
   try {
-    const { leaveBy } = await computeLeaveBy(firstMeeting.start);
+    const { leaveBy } = await computeLeaveBy(
+      firstMeeting.start,
+      process.env.WORK_COORDS ?? "",
+    );
     const wakeTime = new Date(leaveBy.getTime() - GET_READY_MINUTES * 60 * 1000);
     return result(wakeTime, undefined, firstMeeting.start);
   } catch (error) {
