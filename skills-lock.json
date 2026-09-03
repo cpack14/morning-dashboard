@@ -6,6 +6,18 @@
       "sourceType": "github",
       "skillPath": ".claude/skills/tomtom-maps-sdk-js/SKILL.md",
       "computedHash": "8e870e8d97b56f77fee187f6680e594e2dffc75353425969b0eb18d63b9fcb19"
+    },
+    "upstash-ratelimit-js": {
+      "source": "upstash/skills",
+      "sourceType": "github",
+      "skillPath": "skills/upstash-ratelimit-js/SKILL.md",
+      "computedHash": "d5903c53a9b83b798f81826f7bf068ddb202ea30d7dfc462f16c8ffbcc9e4d59"
+    },
+    "upstash-redis-js": {
+      "source": "upstash/skills",
+      "sourceType": "github",
+      "skillPath": "skills/upstash-redis-js/SKILL.md",
+      "computedHash": "a8796862d42bf73bd38c370ab3c99c6230e5790c7886e6ed4ac25004851b5fc9"
     }
   }
 }

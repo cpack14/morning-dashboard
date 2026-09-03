@@ -26,6 +26,21 @@ function todayKey() {
   return new Date().toLocaleDateString("en-CA");
 }
 
+// Best-effort report of what happened with today's alarm. Frank polls
+// this after triggering a wake to decide whether the TV needs to be
+// put back to sleep (only when the alarm timed out unacknowledged).
+async function reportAlarmState(state: "started" | "acknowledged" | "timedOut") {
+  try {
+    await fetch("/api/alarm-state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state, date: todayKey() }),
+    });
+  } catch {
+    // No connection — Frank's shutoff cascade just won't fire this time.
+  }
+}
+
 // Monday of the given date's week, as a YYYY-MM-DD key — used to group
 // "already played this week" so the rotation resets Monday.
 function weekKey(date: Date) {
@@ -175,6 +190,7 @@ export function AlarmController() {
     audio.volume = MIN_VOLUME;
     audio.currentTime = 0;
     audio.play().catch(() => {});
+    reportAlarmState("started");
 
     const start = Date.now();
     rampIntervalRef.current = setInterval(() => {
@@ -186,7 +202,7 @@ export function AlarmController() {
       }
     }, 500);
 
-    maxTimerRef.current = setTimeout(stopAlarm, MAX_PLAY_DURATION_MS);
+    maxTimerRef.current = setTimeout(handleTimeout, MAX_PLAY_DURATION_MS);
 
     return () => {
       if (rampIntervalRef.current) clearInterval(rampIntervalRef.current);
@@ -217,7 +233,22 @@ export function AlarmController() {
     setActive(false);
   }
 
+  // Auto-stop after MAX_PLAY_DURATION_MS with no interaction — reports
+  // "timedOut" so Frank knows nobody was there to hear it.
+  function handleTimeout() {
+    reportAlarmState("timedOut");
+    stopAlarm();
+  }
+
+  // A real button press proves someone's home, whether they stop it
+  // outright or just snooze it.
+  function handleManualStop() {
+    reportAlarmState("acknowledged");
+    stopAlarm();
+  }
+
   function snoozeAlarm() {
+    reportAlarmState("acknowledged");
     pausePlayback();
     setActive(false);
     snoozeTimerRef.current = setTimeout(() => setActive(true), SNOOZE_MS);
@@ -233,7 +264,7 @@ export function AlarmController() {
             <div className="flex gap-[2vh]">
               <button
                 autoFocus
-                onClick={stopAlarm}
+                onClick={handleManualStop}
                 className="text-body rounded-xl bg-accent-work px-[3vh] py-[1.5vh] font-medium text-foreground focus:outline-none focus:ring-4 focus:ring-white"
               >
                 Stop

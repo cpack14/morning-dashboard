@@ -3,6 +3,7 @@ import { HOME_TIMEZONE } from "@/lib/workout";
 import { dayKeyInTimezone, hourInTimezone, isWeekend } from "@/lib/timezone";
 import { fetchGoogleCalendarEvents } from "@/lib/googleCalendar";
 import { computeLeaveBy } from "@/lib/commuteLeaveBy";
+import { getSecurityStatus } from "@/lib/securityStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,10 @@ function result(wakeTime: Date | null, reason?: string, meetingStart?: Date) {
 
 export async function GET() {
   const now = new Date();
+
+  if ((await getSecurityStatus()) === "away") {
+    return result(null, "away");
+  }
 
   if (isWeekend(now)) {
     return result(null, "weekend");
