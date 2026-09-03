@@ -36,6 +36,7 @@ function makeMarkerIcon(emoji: string, background: string): HTMLElement {
 export function TrafficMapCard() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [debugZoom, setDebugZoom] = useState<string | null>(null);
 
   const apiKey = process.env.NEXT_PUBLIC_TOMTOM_API_KEY;
   const homeCoords = process.env.NEXT_PUBLIC_HOME_COORDS;
@@ -112,9 +113,14 @@ export function TrafficMapCard() {
               padding: { top: 30, right: 30, bottom: 30, left: 30 },
             });
             if (camera?.center && camera.zoom !== undefined) {
-              map.easeTo({ ...camera, zoom: Math.max(camera.zoom, MIN_ZOOM) });
+              const targetZoom = Math.max(camera.zoom, MIN_ZOOM);
+              map.easeTo({ ...camera, zoom: targetZoom });
+              setDebugZoom(
+                `computed ${camera.zoom.toFixed(2)} -> using ${targetZoom.toFixed(2)} (dpr ${window.devicePixelRatio})`,
+              );
             } else {
               map.fitBounds(bounds, { padding: 30 });
+              setDebugZoom("fell back to fitBounds (no camera)");
             }
           }
 
@@ -150,6 +156,9 @@ export function TrafficMapCard() {
           <p className="text-label shrink-0 pb-[0.5vh] text-accent-warn">
             Route unavailable — {error}
           </p>
+        )}
+        {debugZoom && (
+          <p className="text-label shrink-0 pb-[0.5vh] text-muted">{debugZoom}</p>
         )}
         <div ref={containerRef} className="min-h-0 w-full flex-1" />
       </div>
