@@ -85,11 +85,11 @@ export function WeatherCard() {
                   {data.current.tempF}°
                 </span>
               </div>
-              <p className="text-hero-sub mt-[0.5vh] text-muted">
+              <p className="text-hero-sub mt-[0.1vh] leading-tight text-muted">
                 {data.current.label}
               </p>
               {data.aqi && (
-                <div className="mt-[0.3vh] max-w-[11em]">
+                <div className="mt-[0.2vh] max-w-[11em]">
                   <p className={`text-label ${AQI_COLOR[data.aqi.category] ?? "text-muted"}`}>
                     AQI {data.aqi.aqi} · {data.aqi.category}
                   </p>
@@ -117,7 +117,7 @@ export function WeatherCard() {
                 <img
                   src="/Weather Icons/sunrise.png"
                   alt=""
-                  className="h-[1.8em] w-[1.8em] -my-[0.4em]"
+                  className="h-[1.6em] w-[1.6em] -my-[0.5em]"
                 />
                 {data.today.sunrise}
                 <span>·</span>
@@ -125,7 +125,7 @@ export function WeatherCard() {
                 <img
                   src="/Weather Icons/sunset.png"
                   alt=""
-                  className="h-[1.8em] w-[1.8em] -my-[0.4em]"
+                  className="h-[1.6em] w-[1.6em] -my-[0.5em]"
                 />
                 {data.today.sunset}
               </p>
@@ -139,7 +139,7 @@ export function WeatherCard() {
             </div>
           </div>
 
-          <div className="mt-auto flex justify-between gap-[0.5vh] overflow-hidden border-t border-surface-border pt-[1vh]">
+          <div className="mt-auto flex justify-between gap-[0.5vh] overflow-hidden border-t border-surface-border pt-[0.6vh]">
             {data.hourly.map((h, i) => (
               <div key={i} className="flex shrink-0 flex-col items-center">
                 <p className="text-body text-muted">{h.hourLabel}</p>

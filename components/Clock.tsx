@@ -15,7 +15,7 @@ export function Clock() {
   return (
     <div>
       <div
-        className="text-clock font-semibold tabular-nums tracking-tight"
+        className="text-clock font-semibold leading-none tracking-tight tabular-nums"
         suppressHydrationWarning
       >
         {now.toLocaleTimeString("en-US", {
@@ -24,7 +24,10 @@ export function Clock() {
           minute: "2-digit",
         })}
       </div>
-      <div className="text-date mt-[0.5vh] text-muted" suppressHydrationWarning>
+      <div
+        className="text-date mt-[0.2vh] leading-tight text-muted"
+        suppressHydrationWarning
+      >
         {now.toLocaleDateString("en-US", {
           timeZone: TIME_ZONE,
           weekday: "long",
