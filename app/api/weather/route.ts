@@ -38,6 +38,49 @@ function formatHourLabel(isoLocal: string) {
   return `${hour12} ${period}`;
 }
 
+// Same naive-local-string handling as formatHourLabel, but keeping
+// minutes since sunrise/sunset rarely land on the hour.
+function formatTimeLabel(isoLocal: string) {
+  const hour24 = Number(isoLocal.slice(11, 13));
+  const minute = isoLocal.slice(14, 16);
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour12}:${minute} ${period}`;
+}
+
+function categorizeAqi(aqi: number): string {
+  if (aqi <= 50) return "Good";
+  if (aqi <= 100) return "Moderate";
+  if (aqi <= 150) return "Unhealthy for Sensitive Groups";
+  if (aqi <= 200) return "Unhealthy";
+  if (aqi <= 300) return "Very Unhealthy";
+  return "Hazardous";
+}
+
+// Best-effort — air quality is a bonus on top of the weather card, so
+// a hiccup here shouldn't take down the rest of it.
+async function fetchAqi(
+  lat: string,
+  lon: string,
+): Promise<{ aqi: number; category: string } | null> {
+  try {
+    const url = new URL("https://air-quality-api.open-meteo.com/v1/air-quality");
+    url.searchParams.set("latitude", lat);
+    url.searchParams.set("longitude", lon);
+    url.searchParams.set("current", "us_aqi");
+    url.searchParams.set("timezone", "auto");
+
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const aqi = Math.round(data.current?.us_aqi);
+    if (!Number.isFinite(aqi)) return null;
+    return { aqi, category: categorizeAqi(aqi) };
+  } catch {
+    return null;
+  }
+}
+
 export async function GET() {
   const lat = process.env.HOME_LAT;
   const lon = process.env.HOME_LON;
@@ -55,7 +98,7 @@ export async function GET() {
   url.searchParams.set("current", "temperature_2m,weather_code,is_day");
   url.searchParams.set(
     "daily",
-    "temperature_2m_max,temperature_2m_min,weather_code",
+    "temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset",
   );
   url.searchParams.set("hourly", "temperature_2m,weather_code");
   url.searchParams.set("temperature_unit", "fahrenheit");
@@ -76,7 +119,10 @@ export async function GET() {
   url.searchParams.set("end_date", tomorrowLocal);
 
   try {
-    const res = await fetch(url, { cache: "no-store" });
+    const [res, aqi] = await Promise.all([
+      fetch(url, { cache: "no-store" }),
+      fetchAqi(lat, lon),
+    ]);
     if (!res.ok) {
       throw new Error(`Open-Meteo returned ${res.status}`);
     }
@@ -90,6 +136,8 @@ export async function GET() {
     const today = {
       highF: Math.round(data.daily.temperature_2m_max[0]),
       lowF: Math.round(data.daily.temperature_2m_min[0]),
+      sunrise: formatTimeLabel(data.daily.sunrise[0]),
+      sunset: formatTimeLabel(data.daily.sunset[0]),
       ...describeWeatherCode(data.daily.weather_code[0]),
     };
 
@@ -110,7 +158,7 @@ export async function GET() {
         };
       });
 
-    return NextResponse.json({ current, today, hourly });
+    return NextResponse.json({ current, today, hourly, aqi });
   } catch (error) {
     return NextResponse.json(
       { unavailable: true, reason: (error as Error).message },

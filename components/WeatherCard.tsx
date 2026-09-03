@@ -17,9 +17,26 @@ type WeatherResponse =
     }
   | {
       current: { tempF: number; label: string; icon: string };
-      today: { highF: number; lowF: number; label: string; icon: string };
+      today: {
+        highF: number;
+        lowF: number;
+        sunrise: string;
+        sunset: string;
+        label: string;
+        icon: string;
+      };
       hourly: HourlyForecast[];
+      aqi: { aqi: number; category: string } | null;
     };
+
+const AQI_COLOR: Record<string, string> = {
+  Good: "text-accent-personal",
+  Moderate: "text-muted",
+  "Unhealthy for Sensitive Groups": "text-accent-warn",
+  Unhealthy: "text-accent-warn",
+  "Very Unhealthy": "text-accent-danger",
+  Hazardous: "text-accent-danger",
+};
 
 export function WeatherCard() {
   const { data, error } = useFetchPoll<WeatherResponse>(
@@ -47,6 +64,11 @@ export function WeatherCard() {
               <p className="text-hero-sub mt-[0.5vh] text-muted">
                 {data.current.label}
               </p>
+              {data.aqi && (
+                <p className={`text-label ${AQI_COLOR[data.aqi.category] ?? "text-muted"}`}>
+                  AQI {data.aqi.aqi} · {data.aqi.category}
+                </p>
+              )}
             </div>
             <div className="text-right">
               <p className="text-label text-muted uppercase tracking-wide">
@@ -54,6 +76,9 @@ export function WeatherCard() {
               </p>
               <p className="text-hero-sub whitespace-nowrap">
                 {data.today.icon} {data.today.highF}° / {data.today.lowF}°
+              </p>
+              <p className="text-label whitespace-nowrap text-muted">
+                ☀️ {data.today.sunrise} · 🌇 {data.today.sunset}
               </p>
             </div>
           </div>
