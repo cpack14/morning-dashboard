@@ -114,11 +114,11 @@ export function WeatherCard() {
               </p>
               <p className="flex items-center justify-end gap-[0.3em] text-label whitespace-nowrap text-muted">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/Weather Icons/sunrise.png" alt="" className="h-[1.1em] w-[1.1em]" />
+                <img src="/Weather Icons/sunrise.png" alt="" className="h-[1.8em] w-[1.8em]" />
                 {data.today.sunrise}
                 <span>·</span>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/Weather Icons/sunset.png" alt="" className="h-[1.1em] w-[1.1em]" />
+                <img src="/Weather Icons/sunset.png" alt="" className="h-[1.8em] w-[1.8em]" />
                 {data.today.sunset}
               </p>
               {(data.today.rainIn > 0.01 || data.today.snowIn > 0.01) && (
