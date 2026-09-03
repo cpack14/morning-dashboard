@@ -2,8 +2,8 @@ import { Clock } from "@/components/Clock";
 import { WeatherCard } from "@/components/WeatherCard";
 import { CommuteCard } from "@/components/CommuteCard";
 import { CalendarCard } from "@/components/CalendarCard";
-import { WorkoutCard } from "@/components/WorkoutCard";
 import { GarminCard } from "@/components/GarminCard";
+import { TrafficMapCard } from "@/components/TrafficMapCard";
 
 export default function Home() {
   return (
@@ -15,7 +15,7 @@ export default function Home() {
       <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-3 gap-[2vh]">
         <WeatherCard />
         <CommuteCard />
-        <WorkoutCard />
+        <TrafficMapCard />
       </div>
 
       <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-3 gap-[2vh]">
