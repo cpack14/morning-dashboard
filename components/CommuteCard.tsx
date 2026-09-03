@@ -15,6 +15,7 @@ type CommutePlanResponse =
       };
       leaveBy?: {
         time: string;
+        travelTimeMinutes: number;
         eventTitle: string;
         eventStart: string;
         trafficCondition: "light" | "average" | "heavy";
@@ -48,7 +49,8 @@ function CommuteContext({
     return (
       <div className="mt-auto border-t border-surface-border pt-[1vh]">
         <p className={`text-body font-medium ${CONDITION_COLOR[s.trafficCondition]}`}>
-          Traffic is {s.trafficCondition} — leave by {formatTime(s.time)}
+          Traffic is {s.trafficCondition} — leave by {formatTime(s.time)} (
+          {s.travelTimeMinutes} min)
         </p>
         <p className="text-label text-muted">
           for &ldquo;{s.eventTitle}&rdquo; at {formatTime(s.eventStart)}

@@ -22,6 +22,7 @@ type Hero = {
 
 type LeaveBy = {
   time: string;
+  travelTimeMinutes: number;
   eventTitle: string;
   eventStart: string;
   trafficCondition: TrafficCondition;
@@ -135,6 +136,7 @@ async function tryComputeWorkLeaveBy(
 
     return {
       time: leaveByTime.toISOString(),
+      travelTimeMinutes: leaveByResult.travelTimeMinutes,
       eventTitle: anchor.title,
       eventStart: anchor.start.toISOString(),
       trafficCondition: leaveByResult.trafficCondition,
@@ -215,6 +217,7 @@ async function planPersonalEvent(now: Date) {
     },
     leaveBy: {
       time: leaveByResult.leaveBy.toISOString(),
+      travelTimeMinutes: leaveByResult.travelTimeMinutes,
       eventTitle: anchor.title,
       eventStart: anchor.start.toISOString(),
       trafficCondition: leaveByResult.trafficCondition,
