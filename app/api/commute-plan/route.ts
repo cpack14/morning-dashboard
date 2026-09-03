@@ -217,6 +217,7 @@ async function planPersonalEvent(now: Date) {
     hero: {
       durationMinutes: leaveByResult.travelTimeMinutes,
       distanceMiles: leaveByResult.distanceMiles,
+      trafficCondition: leaveByResult.trafficCondition,
       live: false,
     },
     leaveBy: {

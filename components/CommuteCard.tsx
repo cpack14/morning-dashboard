@@ -83,7 +83,7 @@ export function CommuteCard() {
             {data.hero.durationMinutes}
             <span className="text-hero-sub font-normal text-muted">
               {" "}
-              min{!data.leaveBy && ` to ${data.destinationLabel}`}
+              min to {data.destinationLabel}
             </span>
           </div>
           <p className="text-hero-sub mt-[0.5vh] text-muted">
