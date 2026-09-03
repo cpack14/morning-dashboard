@@ -26,13 +26,20 @@ export function FittedList({ items }: { items: ReactElement[] }) {
         li.style.display = "";
       });
 
+      // Set the real font-size imperatively (not just a CSS var no
+      // rule reads) so each fits() check below reflects text that has
+      // actually shrunk, rather than repeatedly checking the same
+      // unchanged rendered size and bottoming out at MIN_SCALE.
       let currentScale = 1;
-      list!.style.setProperty("--fit-scale", "1");
+      const applyScale = (s: number) => {
+        list!.style.fontSize = `calc(var(--text-body) * ${s})`;
+      };
+      applyScale(currentScale);
       const fits = () => list!.scrollHeight <= list!.clientHeight + 1;
 
       while (!fits() && currentScale > MIN_SCALE) {
         currentScale = Math.max(MIN_SCALE, currentScale - SCALE_STEP);
-        list!.style.setProperty("--fit-scale", String(currentScale));
+        applyScale(currentScale);
       }
 
       let currentHidden = 0;
@@ -59,7 +66,18 @@ export function FittedList({ items }: { items: ReactElement[] }) {
 
     const observer = new ResizeObserver(measure);
     observer.observe(wrapper);
-    return () => observer.disconnect();
+
+    // Belt-and-suspenders: a poll can swap in a longer items array at
+    // a moment where this measurement races the new content's layout
+    // (observed in practice — items grew from 6 to 8 and the list
+    // silently overflowed with no shrink/hide applied). Re-validating
+    // periodically self-heals regardless of what caused a miss.
+    const interval = setInterval(measure, 4000);
+
+    return () => {
+      observer.disconnect();
+      clearInterval(interval);
+    };
   }, [items]);
 
   return (
