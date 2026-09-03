@@ -81,7 +81,7 @@ export function CommuteCard() {
         <div className="flex h-full flex-col">
           <div className="text-hero font-semibold leading-none tabular-nums">
             {data.hero.durationMinutes}
-            <span className="text-hero-sub font-normal leading-tight text-muted">
+            <span className="text-hero-sub font-normal text-muted">
               {" "}
               min to {data.destinationLabel}
             </span>
