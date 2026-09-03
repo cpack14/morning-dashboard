@@ -16,8 +16,8 @@ function Stat({ label, value }: { label: string; value?: number }) {
   if (value === undefined) return null;
   return (
     <div>
-      <p className="text-xl text-muted uppercase tracking-wide">{label}</p>
-      <p className="text-4xl tabular-nums">{value}</p>
+      <p className="text-label text-muted uppercase tracking-wide">{label}</p>
+      <p className="text-hero-sub tabular-nums">{value}</p>
     </div>
   );
 }
@@ -36,7 +36,7 @@ export function GarminCard() {
         <Unavailable reason={data.reason} />
       )}
       {!error && data && !("unavailable" in data) && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-2 gap-[1.5vh]">
           <Stat label="Steps" value={data.steps} />
           <Stat label="Resting HR" value={data.restingHeartRate} />
           <Stat label="Sleep (hrs)" value={data.sleepHours} />

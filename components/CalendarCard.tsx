@@ -31,12 +31,14 @@ function EventRow({ event }: { event: CalendarEvent }) {
     event.calendar === "work" ? "bg-accent-work" : "bg-accent-personal";
 
   return (
-    <li className="flex items-baseline gap-4">
-      <span className={`h-4 w-4 shrink-0 rounded-full ${dotClass}`} />
-      <span className="w-32 shrink-0 text-2xl text-muted tabular-nums">
+    <li className="flex items-baseline gap-[0.6vh] overflow-hidden">
+      <span
+        className={`h-[0.8vh] w-[0.8vh] shrink-0 rounded-full ${dotClass}`}
+      />
+      <span className="text-body w-[5.5em] shrink-0 text-muted tabular-nums">
         {formatTime(event)}
       </span>
-      <span className="text-3xl">{event.title}</span>
+      <span className="text-body truncate">{event.title}</span>
     </li>
   );
 }
@@ -61,29 +63,29 @@ export function CalendarCard() {
         <Unavailable reason={data?.errors.general ?? "no accounts configured"} />
       )}
       {!error && data && !notConfigured && (
-        <div className="grid grid-cols-2 gap-10">
-          <div>
-            <p className="mb-4 text-xl text-muted uppercase tracking-wide">
+        <div className="grid h-full grid-cols-2 gap-[2vh]">
+          <div className="min-h-0 overflow-hidden">
+            <p className="text-label mb-[0.8vh] text-muted uppercase tracking-wide">
               Today
             </p>
             {today.length === 0 ? (
-              <p className="text-3xl text-muted">Nothing scheduled</p>
+              <p className="text-body text-muted">Nothing scheduled</p>
             ) : (
-              <ul className="space-y-3">
+              <ul className="space-y-[0.6vh]">
                 {today.map((e) => (
                   <EventRow key={e.id} event={e} />
                 ))}
               </ul>
             )}
           </div>
-          <div>
-            <p className="mb-4 text-xl text-muted uppercase tracking-wide">
+          <div className="min-h-0 overflow-hidden">
+            <p className="text-label mb-[0.8vh] text-muted uppercase tracking-wide">
               Tomorrow
             </p>
             {tomorrow.length === 0 ? (
-              <p className="text-3xl text-muted">Nothing scheduled</p>
+              <p className="text-body text-muted">Nothing scheduled</p>
             ) : (
-              <ul className="space-y-3">
+              <ul className="space-y-[0.6vh]">
                 {tomorrow.map((e) => (
                   <EventRow key={e.id} event={e} />
                 ))}

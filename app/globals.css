@@ -22,6 +22,23 @@
   --color-accent-warn: var(--accent-warn);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Fluid type scale: sized off viewport height so the whole dashboard
+     always fits one screen without scrolling, regardless of what
+     viewport size the TV's browser actually reports. */
+  --text-clock: clamp(2rem, 9vh, 4.5rem);
+  --text-date: clamp(0.9rem, 2.6vh, 1.5rem);
+  --text-title: clamp(0.75rem, 1.7vh, 1.15rem);
+  --text-hero: clamp(1.5rem, 6vh, 3rem);
+  --text-hero-sub: clamp(0.9rem, 2.6vh, 1.5rem);
+  --text-body: clamp(0.8rem, 2vh, 1.2rem);
+  --text-label: clamp(0.6rem, 1.4vh, 0.85rem);
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
 }
 
 html {

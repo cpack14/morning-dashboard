@@ -28,29 +28,31 @@ export function WeatherCard() {
         <Unavailable reason={data.reason} />
       )}
       {!error && data && !("unavailable" in data) && (
-        <div>
-          <div className="flex items-center gap-5">
-            <span className="text-8xl">{data.current.icon}</span>
-            <span className="text-8xl font-semibold tabular-nums">
+        <div className="flex h-full flex-col">
+          <div className="flex items-center gap-[1vh]">
+            <span className="text-hero">{data.current.icon}</span>
+            <span className="text-hero font-semibold tabular-nums">
               {data.current.tempF}°
             </span>
           </div>
-          <p className="mt-2 text-3xl text-muted">{data.current.label}</p>
+          <p className="text-hero-sub mt-[0.5vh] text-muted">
+            {data.current.label}
+          </p>
 
-          <div className="mt-8 grid grid-cols-2 gap-6 border-t border-surface-border pt-8">
+          <div className="mt-auto grid grid-cols-2 gap-[1vh] border-t border-surface-border pt-[1vh]">
             <div>
-              <p className="text-xl text-muted uppercase tracking-wide">
+              <p className="text-label text-muted uppercase tracking-wide">
                 Today
               </p>
-              <p className="text-4xl">
+              <p className="text-hero-sub">
                 {data.today.icon} {data.today.highF}° / {data.today.lowF}°
               </p>
             </div>
             <div>
-              <p className="text-xl text-muted uppercase tracking-wide">
+              <p className="text-label text-muted uppercase tracking-wide">
                 Tomorrow
               </p>
-              <p className="text-4xl">
+              <p className="text-hero-sub">
                 {data.tomorrow.icon} {data.tomorrow.highF}° /{" "}
                 {data.tomorrow.lowF}°
               </p>

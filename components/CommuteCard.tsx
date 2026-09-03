@@ -27,11 +27,11 @@ export function CommuteCard() {
       )}
       {!error && data && !("unavailable" in data) && (
         <div>
-          <div className="text-8xl font-semibold tabular-nums">
+          <div className="text-hero font-semibold tabular-nums">
             {data.durationInTrafficMinutes}
-            <span className="text-5xl font-normal text-muted"> min</span>
+            <span className="text-hero-sub font-normal text-muted"> min</span>
           </div>
-          <p className="mt-2 text-3xl text-muted">
+          <p className="text-hero-sub mt-[0.5vh] text-muted">
             {data.distanceMiles} mi
             {data.trafficDelayMinutes > 2 && (
               <span className="text-accent-warn">

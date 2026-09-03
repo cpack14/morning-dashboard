@@ -7,17 +7,19 @@ import { GarminCard } from "@/components/GarminCard";
 
 export default function Home() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-[1800px] flex-col justify-center gap-10 p-16">
-      <Clock />
+    <main className="mx-auto flex h-dvh max-w-[1800px] flex-col gap-[2vh] overflow-hidden p-[2.5vh]">
+      <div className="shrink-0">
+        <Clock />
+      </div>
 
-      <div className="grid grid-cols-3 gap-10">
+      <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-3 gap-[2vh]">
         <WeatherCard />
         <CommuteCard />
         <WorkoutCard />
       </div>
 
-      <div className="grid grid-cols-3 gap-10">
-        <div className="col-span-2">
+      <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-3 gap-[2vh]">
+        <div className="col-span-2 min-h-0">
           <CalendarCard />
         </div>
         <GarminCard />

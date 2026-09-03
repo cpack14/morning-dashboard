@@ -9,19 +9,19 @@ export function Card({
 }) {
   return (
     <section
-      className={`rounded-3xl border border-surface-border bg-surface p-10 ${className}`}
+      className={`flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-surface-border bg-surface p-[2vh] ${className}`}
     >
-      <h2 className="mb-5 text-3xl font-medium tracking-wide text-muted uppercase">
+      <h2 className="text-title mb-[1vh] shrink-0 font-medium tracking-wide text-muted uppercase">
         {title}
       </h2>
-      {children}
+      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
     </section>
   );
 }
 
 export function Unavailable({ reason }: { reason?: string }) {
   return (
-    <p className="text-3xl text-muted">
+    <p className="text-body text-muted">
       Unavailable{reason ? ` — ${reason}` : ""}
     </p>
   );
