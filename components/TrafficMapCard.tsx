@@ -79,6 +79,78 @@ async function fetchRouteWithTraffic(
   return { coords, sections: route.sections ?? [] };
 }
 
+// TomTom's incident iconCategory codes. 6 (jam) is deliberately
+// excluded — that's already conveyed by the route's own color-coding,
+// so surfacing it here would just be redundant noise. Weather-only
+// categories (fog/rain/ice/wind) are excluded too since they describe
+// general conditions rather than a specific blockage on the route.
+const NOTABLE_INCIDENT_ICON: Record<number, string> = {
+  1: "🚗", // accident
+  3: "⚠️", // dangerous conditions
+  8: "🚫", // road closed
+  9: "🚧", // road works
+  11: "🌊", // flooding
+  14: "🛑", // broken down vehicle
+};
+
+type NotableIncident = { description: string; icon: string };
+
+// Fetches incidents in a bounding box around the route and keeps only
+// the notable, non-jam ones with a human-readable description.
+async function fetchNotableIncidents(
+  apiKey: string,
+  coords: [number, number][],
+): Promise<NotableIncident[]> {
+  if (!coords.length) return [];
+
+  const lons = coords.map((c) => c[0]);
+  const lats = coords.map((c) => c[1]);
+  const pad = 0.01;
+  const bbox = [
+    Math.min(...lons) - pad,
+    Math.min(...lats) - pad,
+    Math.max(...lons) + pad,
+    Math.max(...lats) + pad,
+  ].join(",");
+
+  const fields = encodeURIComponent(
+    "{incidents{properties{iconCategory,events{description}}}}",
+  );
+  const url =
+    `https://api.tomtom.com/traffic/services/5/incidentDetails` +
+    `?key=${apiKey}&bbox=${bbox}&fields=${fields}&language=en-US`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const incidents = (data.incidents ?? []) as {
+      properties?: { iconCategory?: number; events?: { description?: string }[] };
+    }[];
+
+    const seen = new Set<string>();
+    const notable: NotableIncident[] = [];
+    for (const inc of incidents) {
+      const category = inc.properties?.iconCategory;
+      const icon = category !== undefined ? NOTABLE_INCIDENT_ICON[category] : undefined;
+      if (!icon) continue;
+
+      const description = inc.properties?.events?.[0]?.description;
+      if (!description) continue;
+
+      const key = `${category}-${description}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      notable.push({ description, icon });
+      if (notable.length >= 3) break;
+    }
+    return notable;
+  } catch {
+    return [];
+  }
+}
+
 function makeMarkerIcon(emoji: string, background: string): HTMLElement {
   const el = document.createElement("div");
   el.textContent = emoji;
@@ -99,6 +171,7 @@ function makeMarkerIcon(emoji: string, background: string): HTMLElement {
 export function TrafficMapCard() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [incidents, setIncidents] = useState<NotableIncident[]>([]);
 
   const apiKey = process.env.NEXT_PUBLIC_TOMTOM_API_KEY;
   const homeCoords = process.env.NEXT_PUBLIC_HOME_COORDS;
@@ -164,7 +237,10 @@ export function TrafficMapCard() {
         }
       });
 
-      if (!destination) return;
+      if (!destination) {
+        setIncidents([]);
+        return;
+      }
 
       const drawRoute = async () => {
         try {
@@ -174,6 +250,10 @@ export function TrafficMapCard() {
             destination,
           );
           if (cancelled || !map || !coords.length) return;
+
+          fetchNotableIncidents(apiKey, coords).then((result) => {
+            if (!cancelled) setIncidents(result);
+          });
 
           const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
             type: "Feature",
@@ -279,6 +359,15 @@ export function TrafficMapCard() {
           <p className="text-label shrink-0 pb-[0.5vh] text-accent-warn">
             Route unavailable — {error}
           </p>
+        )}
+        {incidents.length > 0 && (
+          <div className="shrink-0 pb-[0.5vh]">
+            {incidents.map((inc, i) => (
+              <p key={i} className="text-label text-accent-warn">
+                {inc.icon} {inc.description}
+              </p>
+            ))}
+          </div>
         )}
         <div ref={containerRef} className="min-h-0 w-full flex-1" />
       </div>
