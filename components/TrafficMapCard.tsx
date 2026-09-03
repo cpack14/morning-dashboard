@@ -5,6 +5,11 @@ import { Card, Unavailable } from "@/components/Card";
 import type * as TT from "@tomtom-international/web-sdk-maps";
 
 const REFRESH_MS = 5 * 60 * 1000;
+// Below this, TomTom's traffic-flow layer stops drawing minor roads —
+// fitBounds alone can land below it on a tall/narrow container (like
+// the TV's traffic card) even when the same route on a wider window
+// would land higher, so we floor the zoom after fitting the route.
+const MIN_ZOOM = 13;
 
 function toLngLat(raw: string): [number, number] {
   const [lat, lon] = raw.split(",").map(Number);
@@ -103,7 +108,14 @@ export function TrafficMapCard() {
               (b, c) => b.extend(c),
               new tt.LngLatBounds(coords[0], coords[0]),
             );
-            map.fitBounds(bounds, { padding: 30 });
+            const camera = map.cameraForBounds(bounds, {
+              padding: { top: 30, right: 30, bottom: 30, left: 30 },
+            });
+            if (camera?.center && camera.zoom !== undefined) {
+              map.easeTo({ ...camera, zoom: Math.max(camera.zoom, MIN_ZOOM) });
+            } else {
+              map.fitBounds(bounds, { padding: 30 });
+            }
           }
 
           setError(null);
