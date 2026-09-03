@@ -13,7 +13,6 @@ type DashboardEvent = {
   end: string;
   allDay: boolean;
   calendar: CalendarKey;
-  day: "today" | "tomorrow";
 };
 
 function dayKeyInTimezone(date: Date) {
@@ -30,11 +29,8 @@ export async function GET() {
 
   const now = new Date();
   const timeMin = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-  const timeMax = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
+  const timeMax = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
   const todayKey = dayKeyInTimezone(now);
-  const tomorrowKey = dayKeyInTimezone(
-    new Date(now.getTime() + 24 * 60 * 60 * 1000),
-  );
 
   const events: DashboardEvent[] = [];
   const errors: Partial<Record<CalendarKey, string>> = {};
@@ -64,39 +60,30 @@ export async function GET() {
 
         const allDay = Boolean(item.start?.date && !item.start?.dateTime);
 
-        const pushEvent = (day: "today" | "tomorrow") => {
-          events.push({
-            id: item.id!,
-            title: item.summary ?? "(no title)",
-            start: startRaw,
-            end: endRaw,
-            allDay,
-            calendar: key,
-            day,
-          });
-        };
+        // Multi-day all-day events: end date is exclusive (Google's
+        // convention), so check whether today falls anywhere in
+        // [start, end) rather than only matching the start date.
+        const isToday = allDay
+          ? startRaw <= todayKey && todayKey < endRaw
+          : dayKeyInTimezone(new Date(startRaw)) === todayKey;
 
-        if (allDay) {
-          // Multi-day all-day events: end date is exclusive (Google's
-          // convention), so check whether today/tomorrow fall anywhere
-          // in [start, end) rather than only matching the start date.
-          if (startRaw <= todayKey && todayKey < endRaw) pushEvent("today");
-          if (startRaw <= tomorrowKey && tomorrowKey < endRaw) pushEvent("tomorrow");
-        } else {
-          const dayKey = dayKeyInTimezone(new Date(startRaw));
-          if (dayKey === todayKey) pushEvent("today");
-          else if (dayKey === tomorrowKey) pushEvent("tomorrow");
-        }
+        if (!isToday) continue;
+
+        events.push({
+          id: item.id,
+          title: item.summary ?? "(no title)",
+          start: startRaw,
+          end: endRaw,
+          allDay,
+          calendar: key,
+        });
       }
     } catch (error) {
       errors[key] = (error as Error).message;
     }
   }
 
-  events.sort((a, b) => {
-    if (a.day !== b.day) return a.day === "today" ? -1 : 1;
-    return a.start.localeCompare(b.start);
-  });
+  events.sort((a, b) => a.start.localeCompare(b.start));
 
   return NextResponse.json({ accounts: configured, events, errors });
 }

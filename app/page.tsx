@@ -14,16 +14,13 @@ export default function Home() {
         <Clock />
       </div>
 
-      <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-3 gap-[2vh]">
+      <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-[2vh]">
         <WeatherCard />
         <CommuteCard />
-        <TrafficMapCard />
-      </div>
-
-      <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-3 gap-[2vh]">
-        <div className="col-span-2 min-h-0">
-          <CalendarCard />
+        <div className="row-span-2 min-h-0">
+          <TrafficMapCard />
         </div>
+        <CalendarCard />
         <GarminCard />
       </div>
     </main>
