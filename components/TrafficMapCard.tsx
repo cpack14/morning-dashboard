@@ -15,15 +15,15 @@ function makeMarkerIcon(emoji: string, background: string): HTMLElement {
   const el = document.createElement("div");
   el.textContent = emoji;
   Object.assign(el.style, {
-    width: "2rem",
-    height: "2rem",
+    width: "1.1rem",
+    height: "1.1rem",
     borderRadius: "50%",
     background,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: "1.1rem",
-    boxShadow: "0 0 0 2px rgba(255,255,255,0.85)",
+    fontSize: "0.6rem",
+    boxShadow: "0 0 0 1.5px rgba(255,255,255,0.85)",
   });
   return el;
 }
