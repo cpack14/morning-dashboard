@@ -19,40 +19,38 @@ type CalendarResponse = {
   errors: Partial<Record<"work" | "personal" | "general", string>>;
 };
 
-function formatTime(event: CalendarEvent) {
-  if (event.allDay) return "All day";
-  return new Date(event.start).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+function formatClock(date: Date) {
+  const hour24 = date.getHours();
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  const minutes = date.getMinutes();
+  const hourMin = minutes === 0 ? `${hour12}` : `${hour12}:${String(minutes).padStart(2, "0")}`;
+  return { hourMin, period };
 }
 
-function formatDuration(event: CalendarEvent) {
-  if (event.allDay) return null;
-  const totalMinutes = Math.round(
-    (new Date(event.end).getTime() - new Date(event.start).getTime()) / 60000,
-  );
-  if (totalMinutes <= 0) return null;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours === 0) return `${minutes}m`;
-  if (minutes === 0) return `${hours}h`;
-  return `${hours}h ${minutes}m`;
+function formatTimeRange(event: CalendarEvent) {
+  if (event.allDay) return "All day";
+
+  const start = formatClock(new Date(event.start));
+  const end = formatClock(new Date(event.end));
+
+  if (start.period === end.period) {
+    return `${start.hourMin}-${end.hourMin} ${end.period}`;
+  }
+  return `${start.hourMin} ${start.period}-${end.hourMin} ${end.period}`;
 }
 
 function EventRow({ event }: { event: CalendarEvent }) {
   const dotClass =
     event.calendar === "work" ? "bg-accent-work" : "bg-accent-personal";
-  const duration = formatDuration(event);
 
   return (
     <li className="flex items-baseline gap-[0.6vh] overflow-hidden">
       <span
         className={`h-[0.8vh] w-[0.8vh] shrink-0 rounded-full ${dotClass}`}
       />
-      <span className="text-body w-[8.5em] shrink-0 text-muted tabular-nums">
-        {formatTime(event)}
-        {duration && ` · ${duration}`}
+      <span className="text-body shrink-0 text-muted tabular-nums">
+        {formatTimeRange(event)}
       </span>
       <span className="text-body truncate">{event.title}</span>
     </li>
