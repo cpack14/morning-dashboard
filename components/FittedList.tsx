@@ -10,45 +10,60 @@ const SCALE_STEP = 0.05;
 // than silently cutting off the last visible item. `items` must each
 // be a keyed <li> element.
 export function FittedList({ items }: { items: ReactElement[] }) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const [scale, setScale] = useState(1);
   const [hiddenCount, setHiddenCount] = useState(0);
 
   useLayoutEffect(() => {
+    const wrapper = wrapperRef.current;
     const list = listRef.current;
-    if (!list) return;
+    if (!wrapper || !list) return;
 
-    const children = Array.from(list.children) as HTMLElement[];
-    children.forEach((li) => {
-      li.style.display = "";
-    });
+    function measure() {
+      const children = Array.from(list!.children) as HTMLElement[];
+      children.forEach((li) => {
+        li.style.display = "";
+      });
 
-    let currentScale = 1;
-    list.style.setProperty("--fit-scale", "1");
-    const fits = () => list.scrollHeight <= list.clientHeight + 1;
+      let currentScale = 1;
+      list!.style.setProperty("--fit-scale", "1");
+      const fits = () => list!.scrollHeight <= list!.clientHeight + 1;
 
-    while (!fits() && currentScale > MIN_SCALE) {
-      currentScale = Math.max(MIN_SCALE, currentScale - SCALE_STEP);
-      list.style.setProperty("--fit-scale", String(currentScale));
-    }
-
-    let currentHidden = 0;
-    if (!fits()) {
-      for (let hideFrom = children.length - 1; hideFrom >= 0; hideFrom--) {
-        for (let i = hideFrom; i < children.length; i++) {
-          children[i].style.display = "none";
-        }
-        currentHidden = children.length - hideFrom;
-        if (fits()) break;
+      while (!fits() && currentScale > MIN_SCALE) {
+        currentScale = Math.max(MIN_SCALE, currentScale - SCALE_STEP);
+        list!.style.setProperty("--fit-scale", String(currentScale));
       }
+
+      let currentHidden = 0;
+      if (!fits()) {
+        for (let hideFrom = children.length - 1; hideFrom >= 0; hideFrom--) {
+          for (let i = hideFrom; i < children.length; i++) {
+            children[i].style.display = "none";
+          }
+          currentHidden = children.length - hideFrom;
+          if (fits()) break;
+        }
+      }
+
+      setScale(currentScale);
+      setHiddenCount(currentHidden);
     }
 
-    setScale(currentScale);
-    setHiddenCount(currentHidden);
+    // Measure immediately, but also re-measure once web fonts finish
+    // loading and whenever the card's own size actually changes — a
+    // measurement taken against fallback-font metrics (common on the
+    // TV's WebView) can under-count how much actually fits.
+    measure();
+    document.fonts?.ready?.then(measure);
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(wrapper);
+    return () => observer.disconnect();
   }, [items]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={wrapperRef} className="flex h-full min-h-0 flex-col">
       <ul
         ref={listRef}
         className="min-h-0 flex-1 space-y-[0.4em] overflow-hidden"
