@@ -114,10 +114,16 @@ export function TrafficMapCard() {
             });
             if (camera?.center && camera.zoom !== undefined) {
               const targetZoom = Math.max(camera.zoom, MIN_ZOOM);
+              const computedZoom = camera.zoom;
               map.easeTo({ ...camera, zoom: targetZoom });
-              setDebugZoom(
-                `computed ${camera.zoom.toFixed(2)} -> using ${targetZoom.toFixed(2)} (dpr ${window.devicePixelRatio})`,
-              );
+              map.once("moveend", () => {
+                if (cancelled || !map || !containerRef.current) return;
+                const rect = containerRef.current.getBoundingClientRect();
+                setDebugZoom(
+                  `computed ${computedZoom.toFixed(2)} -> target ${targetZoom.toFixed(2)} -> actual ${map.getZoom().toFixed(2)} | ` +
+                    `rect ${Math.round(rect.width)}x${Math.round(rect.height)}, client ${containerRef.current.clientWidth}x${containerRef.current.clientHeight}, dpr ${window.devicePixelRatio}`,
+                );
+              });
             } else {
               map.fitBounds(bounds, { padding: 30 });
               setDebugZoom("fell back to fitBounds (no camera)");
