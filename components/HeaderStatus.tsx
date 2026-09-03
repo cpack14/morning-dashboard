@@ -17,6 +17,18 @@ type DaySummaryResponse =
 
 type SecurityStatusResponse = { state: "home" | "away" };
 
+// Nager.Date's official names read awkwardly as a greeting verbatim
+// (double "Day", British "Labour", "Happy Christmas" instead of
+// "Merry") — override the handful where that shows.
+const HOLIDAY_GREETING_OVERRIDES: Record<string, string> = {
+  "New Year's Day": "Happy New Year!",
+  "Martin Luther King, Jr. Day": "Happy Martin Luther King Jr. Day!",
+  "Juneteenth National Independence Day": "Happy Juneteenth!",
+  "Labour Day": "Happy Labor Day!",
+  "Thanksgiving Day": "Happy Thanksgiving!",
+  "Christmas Day": "Merry Christmas!",
+};
+
 function timeOfDayGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";
@@ -28,7 +40,10 @@ function describeDay(data: Extract<DaySummaryResponse, { dayType: string }>): st
   const greeting = timeOfDayGreeting();
 
   if (data.dayType === "holiday") {
-    return `${greeting} ${NAME}, Happy ${data.holidayName}!`;
+    const holidayLine = data.holidayName
+      ? (HOLIDAY_GREETING_OVERRIDES[data.holidayName] ?? `Happy ${data.holidayName}!`)
+      : "Happy Holidays!";
+    return `${greeting} ${NAME}, ${holidayLine}`;
   }
 
   if (data.dayType === "weekend") {
