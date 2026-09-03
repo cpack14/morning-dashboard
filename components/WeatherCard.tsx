@@ -38,6 +38,28 @@ const AQI_COLOR: Record<string, string> = {
   Hazardous: "text-accent-danger",
 };
 
+// Standard 6-band EPA AQI scale, drawn as equal-width segments (like
+// most consumer weather apps) rather than to numeric scale — the
+// bands themselves are wildly uneven in width (50 units vs. 200), so
+// equal segments read far more clearly than a true-to-scale bar.
+const AQI_BREAKPOINTS = [0, 50, 100, 150, 200, 300, 500];
+const AQI_GRADIENT =
+  "linear-gradient(to right, #4ade80, #facc15, #fb923c, #ef4444, #a855f7, #7f1d1d)";
+
+function aqiMarkerPosition(aqi: number): number {
+  const clamped = Math.min(Math.max(aqi, 0), 500);
+  const bandCount = AQI_BREAKPOINTS.length - 1;
+  for (let i = 0; i < bandCount; i++) {
+    const bandStart = AQI_BREAKPOINTS[i];
+    const bandEnd = AQI_BREAKPOINTS[i + 1];
+    if (clamped <= bandEnd) {
+      const fractionInBand = (clamped - bandStart) / (bandEnd - bandStart);
+      return ((i + fractionInBand) / bandCount) * 100;
+    }
+  }
+  return 100;
+}
+
 export function WeatherCard() {
   const { data, error } = useFetchPoll<WeatherResponse>(
     "/api/weather",
@@ -65,9 +87,20 @@ export function WeatherCard() {
                 {data.current.label}
               </p>
               {data.aqi && (
-                <p className={`text-label ${AQI_COLOR[data.aqi.category] ?? "text-muted"}`}>
-                  AQI {data.aqi.aqi} · {data.aqi.category}
-                </p>
+                <div className="mt-[0.3vh] max-w-[11em]">
+                  <p className={`text-label ${AQI_COLOR[data.aqi.category] ?? "text-muted"}`}>
+                    AQI {data.aqi.aqi} · {data.aqi.category}
+                  </p>
+                  <div
+                    className="relative mt-[0.4vh] h-[0.6vh] w-full rounded-full"
+                    style={{ background: AQI_GRADIENT }}
+                  >
+                    <div
+                      className="absolute top-1/2 h-[1.4vh] w-[2px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white"
+                      style={{ left: `${aqiMarkerPosition(data.aqi.aqi)}%` }}
+                    />
+                  </div>
+                </div>
               )}
             </div>
             <div className="text-right">
