@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, Unavailable } from "@/components/Card";
+import { MarqueeText } from "@/components/MarqueeText";
 import { useFetchPoll } from "@/lib/useFetchPoll";
 
 type CommutePlanResponse =
@@ -79,12 +80,15 @@ export function CommuteCard() {
       )}
       {!error && data && data.mode !== "unavailable" && (
         <div className="flex h-full flex-col">
-          <div className="text-hero font-semibold leading-none tabular-nums">
-            {data.hero.durationMinutes}
-            <span className="text-hero-sub font-normal text-muted">
-              {" "}
-              min to {data.destinationLabel}
-            </span>
+          <div className="flex items-baseline gap-[0.3em]">
+            <div className="shrink-0 text-hero font-semibold leading-none tabular-nums">
+              {data.hero.durationMinutes}
+              <span className="text-hero-sub font-normal text-muted"> min to</span>
+            </div>
+            <MarqueeText
+              text={data.destinationLabel}
+              className="min-w-0 flex-1 text-hero-sub text-muted"
+            />
           </div>
           <p className="text-hero-sub mt-[0.5vh] text-muted">
             {data.hero.distanceMiles} mi
