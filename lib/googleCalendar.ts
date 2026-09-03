@@ -2,8 +2,15 @@ export type RawCalendarEvent = {
   id: string;
   summary?: string;
   location?: string;
+  eventType?: string;
   start?: { date?: string; dateTime?: string };
   end?: { date?: string; dateTime?: string };
+  attendees?: {
+    email: string;
+    self?: boolean;
+    resource?: boolean;
+    responseStatus?: string;
+  }[];
 };
 
 export async function getGoogleAccessToken(refreshToken: string) {
@@ -32,6 +39,7 @@ export async function fetchGoogleCalendarEvents(
   timeMin: string,
   timeMax: string,
   maxResults = 20,
+  eventTypes?: string[],
 ): Promise<RawCalendarEvent[]> {
   const accessToken = await getGoogleAccessToken(refreshToken);
 
@@ -43,6 +51,9 @@ export async function fetchGoogleCalendarEvents(
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
   url.searchParams.set("maxResults", String(maxResults));
+  for (const type of eventTypes ?? []) {
+    url.searchParams.append("eventTypes", type);
+  }
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },

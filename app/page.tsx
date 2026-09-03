@@ -1,4 +1,5 @@
 import { Clock } from "@/components/Clock";
+import { HeaderStatus } from "@/components/HeaderStatus";
 import { WeatherCard } from "@/components/WeatherCard";
 import { CommuteCard } from "@/components/CommuteCard";
 import { CalendarCard } from "@/components/CalendarCard";
@@ -12,8 +13,9 @@ export default function Home() {
   return (
     <main className="mx-auto flex h-dvh max-w-[1800px] flex-col gap-[0.8vh] overflow-hidden p-[1.5vh]">
       <AlarmController />
-      <div className="shrink-0">
+      <div className="flex shrink-0 items-start justify-between gap-[1vh]">
         <Clock />
+        <HeaderStatus />
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-[1.2vh]">
