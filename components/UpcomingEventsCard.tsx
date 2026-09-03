@@ -2,6 +2,7 @@
 
 import { Card, Unavailable } from "@/components/Card";
 import { FittedList } from "@/components/FittedList";
+import { MarqueeText } from "@/components/MarqueeText";
 import { useFetchPoll } from "@/lib/useFetchPoll";
 
 type UpcomingEvent = {
@@ -42,7 +43,7 @@ function UpcomingRow({ event }: { event: UpcomingEvent }) {
       <span className="w-[4.5em] shrink-0 text-muted tabular-nums">
         {formatTimeLabel(event)}
       </span>
-      <span className="truncate">{event.title}</span>
+      <MarqueeText text={event.title} className="min-w-0 flex-1" />
     </li>
   );
 }

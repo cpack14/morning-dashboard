@@ -2,6 +2,7 @@
 
 import { Card, Unavailable } from "@/components/Card";
 import { FittedList } from "@/components/FittedList";
+import { MarqueeText } from "@/components/MarqueeText";
 import { useFetchPoll } from "@/lib/useFetchPoll";
 
 type CalendarEvent = {
@@ -53,7 +54,7 @@ function EventRow({ event }: { event: CalendarEvent }) {
       <span className="shrink-0 text-muted tabular-nums">
         {formatTimeRange(event)}
       </span>
-      <span className="truncate">{event.title}</span>
+      <MarqueeText text={event.title} className="min-w-0 flex-1" />
     </li>
   );
 }
