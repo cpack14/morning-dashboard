@@ -9,7 +9,7 @@ const REFRESH_MS = 5 * 60 * 1000;
 // fitBounds alone can land below it on a tall/narrow container (like
 // the TV's traffic card) even when the same route on a wider window
 // would land higher, so we floor the zoom after fitting the route.
-const MIN_ZOOM = 13;
+const MIN_ZOOM = 11.5;
 
 function toLngLat(raw: string): [number, number] {
   const [lat, lon] = raw.split(",").map(Number);
