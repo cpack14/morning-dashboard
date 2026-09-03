@@ -1,8 +1,11 @@
+import { classifyTraffic, type TrafficCondition } from "@/lib/trafficCondition";
+
 export type CurrentEta = {
   durationInTrafficMinutes: number;
   durationNoTrafficMinutes: number;
   distanceMiles: number;
   trafficDelayMinutes: number;
+  trafficCondition: TrafficCondition;
 };
 
 // Live (current-traffic) ETA between two "lat,lon" points.
@@ -21,12 +24,16 @@ export async function getCurrentEta(
   const summary = data.routes?.[0]?.summary;
   if (!summary) throw new Error("No route summary in TomTom response");
 
+  const durationNoTrafficMinutes = Math.round(
+    (summary.travelTimeInSeconds - summary.trafficDelayInSeconds) / 60,
+  );
+  const trafficDelayMinutes = Math.round(summary.trafficDelayInSeconds / 60);
+
   return {
     durationInTrafficMinutes: Math.round(summary.travelTimeInSeconds / 60),
-    durationNoTrafficMinutes: Math.round(
-      (summary.travelTimeInSeconds - summary.trafficDelayInSeconds) / 60,
-    ),
+    durationNoTrafficMinutes,
     distanceMiles: Math.round((summary.lengthInMeters / 1609.34) * 10) / 10,
-    trafficDelayMinutes: Math.round(summary.trafficDelayInSeconds / 60),
+    trafficDelayMinutes,
+    trafficCondition: classifyTraffic(trafficDelayMinutes, durationNoTrafficMinutes),
   };
 }

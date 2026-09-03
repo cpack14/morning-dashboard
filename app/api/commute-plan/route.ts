@@ -4,6 +4,7 @@ import { fetchGoogleCalendarEvents } from "@/lib/googleCalendar";
 import { computeLeaveBy } from "@/lib/commuteLeaveBy";
 import { getCurrentEta } from "@/lib/currentEta";
 import { geocodeAddress } from "@/lib/tomtomGeocode";
+import type { TrafficCondition } from "@/lib/trafficCondition";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +12,14 @@ const EARLY_CUTOFF_HOUR = 9;
 const AFTERNOON_CUTOFF_HOUR = 13;
 const SUNDAY_NOON_HOUR = 12;
 
-type TrafficCondition = "light" | "average" | "heavy";
-
 type Hero = {
   durationMinutes: number;
   distanceMiles: number;
   trafficDelayMinutes?: number;
+  // Only present for live hero numbers (work/church/bountiful) — the
+  // personal-event hero is itself a future prediction, whose condition
+  // is already shown on the leaveBy line instead.
+  trafficCondition?: TrafficCondition;
   live: boolean;
 };
 
@@ -64,6 +67,7 @@ async function planWorkMeeting(now: Date) {
       durationMinutes: eta.durationInTrafficMinutes,
       distanceMiles: eta.distanceMiles,
       trafficDelayMinutes: eta.trafficDelayMinutes,
+      trafficCondition: eta.trafficCondition,
       live: true,
     };
   } catch (error) {
@@ -247,6 +251,7 @@ async function planFixedDestination(mode: "church" | "bountiful") {
         durationMinutes: eta.durationInTrafficMinutes,
         distanceMiles: eta.distanceMiles,
         trafficDelayMinutes: eta.trafficDelayMinutes,
+        trafficCondition: eta.trafficCondition,
         live: true,
       },
     });

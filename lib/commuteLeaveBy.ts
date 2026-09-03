@@ -1,10 +1,12 @@
+import { classifyTraffic, type TrafficCondition } from "@/lib/trafficCondition";
+
 const ARRIVAL_BUFFER_MINUTES = 10;
 
 export type LeaveByResult = {
   leaveBy: Date;
   travelTimeMinutes: number;
   distanceMiles: number;
-  trafficCondition: "light" | "average" | "heavy";
+  trafficCondition: TrafficCondition;
 };
 
 // Asks TomTom what time to leave home to arrive at the given
@@ -37,9 +39,7 @@ export async function computeLeaveBy(
 
   const freeFlow = summary.noTrafficTravelTimeInSeconds as number;
   const predicted = summary.historicTrafficTravelTimeInSeconds as number;
-  const slowdownPct = freeFlow > 0 ? ((predicted - freeFlow) / freeFlow) * 100 : 0;
-  const trafficCondition =
-    slowdownPct >= 20 ? "heavy" : slowdownPct >= 8 ? "average" : "light";
+  const trafficCondition = classifyTraffic((predicted - freeFlow) / 60, freeFlow / 60);
 
   return { leaveBy, travelTimeMinutes, distanceMiles, trafficCondition };
 }

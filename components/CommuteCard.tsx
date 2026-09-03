@@ -11,6 +11,7 @@ type CommutePlanResponse =
         durationMinutes: number;
         distanceMiles: number;
         trafficDelayMinutes?: number;
+        trafficCondition?: "light" | "moderate" | "heavy";
         live: boolean;
       };
       leaveBy?: {
@@ -18,7 +19,7 @@ type CommutePlanResponse =
         travelTimeMinutes: number;
         eventTitle: string;
         eventStart: string;
-        trafficCondition: "light" | "average" | "heavy";
+        trafficCondition: "light" | "moderate" | "heavy";
         tight: boolean;
       };
     }
@@ -26,7 +27,7 @@ type CommutePlanResponse =
 
 const CONDITION_COLOR: Record<string, string> = {
   heavy: "text-accent-warn",
-  average: "text-muted",
+  moderate: "text-muted",
   light: "text-accent-personal",
 };
 
@@ -49,8 +50,8 @@ function CommuteContext({
     return (
       <div className="mt-auto border-t border-surface-border pt-[1vh]">
         <p className={`text-body font-medium ${CONDITION_COLOR[s.trafficCondition]}`}>
-          Traffic is {s.trafficCondition} — leave by {formatTime(s.time)} (
-          {s.travelTimeMinutes} min)
+          Leave by {formatTime(s.time)} ({s.travelTimeMinutes} min) — traffic
+          is usually {s.trafficCondition}
         </p>
         <p className="text-label text-muted">
           for &ldquo;{s.eventTitle}&rdquo; at {formatTime(s.eventStart)}
@@ -87,13 +88,15 @@ export function CommuteCard() {
           </div>
           <p className="text-hero-sub mt-[0.5vh] text-muted">
             {data.hero.distanceMiles} mi
-            {data.hero.trafficDelayMinutes !== undefined &&
-              data.hero.trafficDelayMinutes > 2 && (
-                <span className="text-accent-warn">
-                  {" "}
-                  · +{data.hero.trafficDelayMinutes} min traffic
-                </span>
-              )}
+            {data.hero.trafficCondition && (
+              <span className={CONDITION_COLOR[data.hero.trafficCondition]}>
+                {" "}
+                · traffic is {data.hero.trafficCondition}
+                {data.hero.trafficDelayMinutes !== undefined &&
+                  data.hero.trafficDelayMinutes > 2 &&
+                  ` (+${data.hero.trafficDelayMinutes} min)`}
+              </span>
+            )}
           </p>
           <CommuteContext data={data} />
         </div>
