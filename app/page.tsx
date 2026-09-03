@@ -4,12 +4,14 @@ import { CommuteCard } from "@/components/CommuteCard";
 import { CalendarCard } from "@/components/CalendarCard";
 import { UpcomingEventsCard } from "@/components/UpcomingEventsCard";
 import { TrafficMapCard } from "@/components/TrafficMapCard";
+import { AlarmController } from "@/components/AlarmController";
 
 export const dynamic = "force-dynamic";
 
 export default function Home() {
   return (
     <main className="mx-auto flex h-dvh max-w-[1800px] flex-col gap-[2vh] overflow-hidden p-[2.5vh]">
+      <AlarmController />
       <div className="shrink-0">
         <Clock />
       </div>
