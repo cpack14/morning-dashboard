@@ -9,6 +9,7 @@
   --accent-work: #5b9dff;
   --accent-personal: #4ade80;
   --accent-warn: #f59e0b;
+  --accent-danger: #ef4444;
 }
 
 @theme inline {
@@ -20,6 +21,7 @@
   --color-accent-work: var(--accent-work);
   --color-accent-personal: var(--accent-personal);
   --color-accent-warn: var(--accent-warn);
+  --color-accent-danger: var(--accent-danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 

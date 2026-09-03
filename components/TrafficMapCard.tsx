@@ -5,10 +5,65 @@ import { Card, Unavailable } from "@/components/Card";
 import type * as TT from "@tomtom-international/web-sdk-maps";
 
 const REFRESH_MS = 5 * 60 * 1000;
+const ROUTE_COLOR = "#5b9dff";
+const MODERATE_DELAY_COLOR = "#f59e0b";
+const SEVERE_DELAY_COLOR = "#ef4444";
+
+// TomTom's traffic sections report a 0-4 magnitude: 0 unknown, 1 minor,
+// 2 moderate, 3 major, 4 undefined (usually a closure). Minor/unknown
+// isn't worth calling out — the route just stays its normal blue there.
+function delayColor(magnitude: number | undefined): string | undefined {
+  if (magnitude === 2) return MODERATE_DELAY_COLOR;
+  if (magnitude !== undefined && magnitude >= 3) return SEVERE_DELAY_COLOR;
+  return undefined;
+}
 
 function toLngLat(raw: string): [number, number] {
   const [lat, lon] = raw.split(",").map(Number);
   return [lon, lat];
+}
+
+type TomTomRouteSection = {
+  startPointIndex: number;
+  endPointIndex: number;
+  sectionType: string;
+  magnitudeOfDelay?: number;
+};
+
+type TomTomRoutingResponse = {
+  routes: {
+    legs: { points: { latitude: number; longitude: number }[] }[];
+    sections?: TomTomRouteSection[];
+  }[];
+};
+
+// Calls TomTom's routing REST API directly rather than going through
+// @tomtom-international/web-sdk-services' calculateRoute/
+// toRouteSectionsCollection helpers — that convenience method throws
+// internally in the installed SDK version when traffic sections are
+// requested, so we parse the raw response ourselves instead.
+async function fetchRouteWithTraffic(
+  apiKey: string,
+  origin: [number, number],
+  destination: [number, number],
+): Promise<{ coords: [number, number][]; sections: TomTomRouteSection[] }> {
+  const url =
+    `https://api.tomtom.com/routing/1/calculateRoute/` +
+    `${origin[1]},${origin[0]}:${destination[1]},${destination[0]}/json` +
+    `?key=${apiKey}&routeType=fastest&traffic=true&sectionType=traffic`;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`TomTom routing request failed (${res.status})`);
+  const data: TomTomRoutingResponse = await res.json();
+
+  const route = data.routes?.[0];
+  if (!route) throw new Error("No route returned");
+
+  const coords: [number, number][] = route.legs.flatMap((leg) =>
+    leg.points.map((p): [number, number] => [p.longitude, p.latitude]),
+  );
+
+  return { coords, sections: route.sections ?? [] };
 }
 
 function makeMarkerIcon(emoji: string, background: string): HTMLElement {
@@ -51,7 +106,6 @@ export function TrafficMapCard() {
         import("@tomtom-international/web-sdk-maps"),
         import("@tomtom-international/web-sdk-maps/dist/maps.css"),
       ]);
-      const services = await import("@tomtom-international/web-sdk-services");
 
       if (cancelled || !containerRef.current) return;
 
@@ -64,7 +118,6 @@ export function TrafficMapCard() {
       });
 
       map.on("load", () => {
-        map?.showTrafficFlow();
         new tt.Marker({ element: makeMarkerIcon("🏠", "#5b9dff") })
           .setLngLat(origin)
           .addTo(map!);
@@ -75,14 +128,18 @@ export function TrafficMapCard() {
 
       const drawRoute = async () => {
         try {
-          const response = await services.services.calculateRoute({
-            key: apiKey,
-            locations: [origin, destination],
-            routeType: "fastest",
-          });
-          if (cancelled || !map) return;
+          const { coords, sections } = await fetchRouteWithTraffic(
+            apiKey,
+            origin,
+            destination,
+          );
+          if (cancelled || !map || !coords.length) return;
 
-          const geojson = response.toGeoJson();
+          const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates: coords },
+          };
           const source = map.getSource("route") as TT.GeoJSONSource | undefined;
           if (source) {
             source.setData(geojson);
@@ -92,19 +149,55 @@ export function TrafficMapCard() {
               id: "route-line",
               type: "line",
               source: "route",
-              paint: { "line-color": "#5b9dff", "line-width": 3, "line-opacity": 0.55 },
+              paint: { "line-color": ROUTE_COLOR, "line-width": 5, "line-opacity": 0.9 },
             });
           }
 
-          const coords = (geojson.features[0]?.geometry as GeoJSON.LineString | undefined)
-            ?.coordinates as [number, number][] | undefined;
-          if (coords?.length) {
-            const bounds = coords.reduce(
-              (b, c) => b.extend(c),
-              new tt.LngLatBounds(coords[0], coords[0]),
-            );
-            map.fitBounds(bounds, { padding: 30 });
+          const severityFeatures = sections
+            .filter((s) => s.sectionType?.toLowerCase() === "traffic")
+            .map((s) => {
+              const color = delayColor(s.magnitudeOfDelay);
+              if (!color) return null;
+              const feature: GeoJSON.Feature<GeoJSON.LineString, { color: string }> = {
+                type: "Feature",
+                properties: { color },
+                geometry: {
+                  type: "LineString",
+                  coordinates: coords.slice(s.startPointIndex, s.endPointIndex + 1),
+                },
+              };
+              return feature;
+            })
+            .filter((f): f is NonNullable<typeof f> => f !== null);
+          const severityGeojson: GeoJSON.FeatureCollection = {
+            type: "FeatureCollection",
+            features: severityFeatures,
+          };
+
+          const severitySource = map.getSource("route-severity") as
+            | TT.GeoJSONSource
+            | undefined;
+          if (severitySource) {
+            severitySource.setData(severityGeojson);
+          } else {
+            map.addSource("route-severity", { type: "geojson", data: severityGeojson });
+            map.addLayer({
+              id: "route-severity-line",
+              type: "line",
+              source: "route-severity",
+              paint: {
+                "line-color": ["get", "color"],
+                "line-width": 5,
+                "line-opacity": 1,
+              },
+            });
           }
+
+          const bounds = coords.reduce(
+            (b, c) => b.extend(c),
+            new tt.LngLatBounds(coords[0], coords[0]),
+          );
+          map.fitBounds(bounds, { padding: 30 });
 
           setError(null);
         } catch (err) {
