@@ -5,11 +5,6 @@ import { Card, Unavailable } from "@/components/Card";
 import type * as TT from "@tomtom-international/web-sdk-maps";
 
 const REFRESH_MS = 5 * 60 * 1000;
-// Below this, TomTom's traffic-flow layer stops drawing minor roads —
-// fitBounds alone can land below it on a tall/narrow container (like
-// the TV's traffic card) even when the same route on a wider window
-// would land higher, so we floor the zoom after fitting the route.
-const MIN_ZOOM = 11.2;
 
 function toLngLat(raw: string): [number, number] {
   const [lat, lon] = raw.split(",").map(Number);
@@ -36,7 +31,6 @@ function makeMarkerIcon(emoji: string, background: string): HTMLElement {
 export function TrafficMapCard() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
-  const [debugZoom, setDebugZoom] = useState<string | null>(null);
 
   const apiKey = process.env.NEXT_PUBLIC_TOMTOM_API_KEY;
   const homeCoords = process.env.NEXT_PUBLIC_HOME_COORDS;
@@ -109,25 +103,7 @@ export function TrafficMapCard() {
               (b, c) => b.extend(c),
               new tt.LngLatBounds(coords[0], coords[0]),
             );
-            const camera = map.cameraForBounds(bounds, {
-              padding: { top: 30, right: 30, bottom: 30, left: 30 },
-            });
-            if (camera?.center && camera.zoom !== undefined) {
-              const targetZoom = Math.max(camera.zoom, MIN_ZOOM);
-              const computedZoom = camera.zoom;
-              map.easeTo({ ...camera, zoom: targetZoom });
-              map.once("moveend", () => {
-                if (cancelled || !map || !containerRef.current) return;
-                const rect = containerRef.current.getBoundingClientRect();
-                setDebugZoom(
-                  `computed ${computedZoom.toFixed(2)} -> target ${targetZoom.toFixed(2)} -> actual ${map.getZoom().toFixed(2)} | ` +
-                    `rect ${Math.round(rect.width)}x${Math.round(rect.height)}, client ${containerRef.current.clientWidth}x${containerRef.current.clientHeight}, dpr ${window.devicePixelRatio}`,
-                );
-              });
-            } else {
-              map.fitBounds(bounds, { padding: 30 });
-              setDebugZoom("fell back to fitBounds (no camera)");
-            }
+            map.fitBounds(bounds, { padding: 30 });
           }
 
           setError(null);
@@ -162,9 +138,6 @@ export function TrafficMapCard() {
           <p className="text-label shrink-0 pb-[0.5vh] text-accent-warn">
             Route unavailable — {error}
           </p>
-        )}
-        {debugZoom && (
-          <p className="text-label shrink-0 pb-[0.5vh] text-muted">{debugZoom}</p>
         )}
         <div ref={containerRef} className="min-h-0 w-full flex-1" />
       </div>
