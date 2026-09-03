@@ -4,7 +4,7 @@ import { HOME_TIMEZONE } from "@/lib/workout";
 
 export const dynamic = "force-dynamic";
 
-const HOURS_TO_SHOW = 6;
+const HOURS_TO_SHOW = 8;
 
 function currentHourKey(timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {

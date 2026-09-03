@@ -55,9 +55,9 @@ export function WeatherCard() {
             </p>
           </div>
 
-          <div className="mt-auto flex justify-between gap-[0.5vh] border-t border-surface-border pt-[1vh]">
+          <div className="mt-auto flex justify-start gap-[1.2vh] overflow-hidden border-t border-surface-border pt-[1vh]">
             {data.hourly.map((h, i) => (
-              <div key={i} className="flex flex-col items-center">
+              <div key={i} className="flex shrink-0 flex-col items-center">
                 <p className="text-label text-muted">{h.hourLabel}</p>
                 <p className="text-body">{h.icon}</p>
                 <p className="text-body tabular-nums">{h.tempF}°</p>
