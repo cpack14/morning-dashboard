@@ -59,8 +59,9 @@ export function WeatherCard() {
             {data.hourly.map((h, i) => (
               <div key={i} className="flex shrink-0 flex-col items-center">
                 <p className="text-label text-muted">{h.hourLabel}</p>
-                <p className="text-body">{h.icon}</p>
-                <p className="text-body tabular-nums">{h.tempF}°</p>
+                <p className="text-body whitespace-nowrap">
+                  {h.icon} {h.tempF}°
+                </p>
               </div>
             ))}
           </div>
