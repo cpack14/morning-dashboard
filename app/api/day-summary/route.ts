@@ -15,13 +15,26 @@ type DaySummaryResponse =
       meetings?: { client: number; internal: number };
       personalEventCount?: number;
       outOfOffice: { title: string; daysUntil: number } | null;
+      birthdays: string[];
     };
 
 type NagerHoliday = { date: string; name: string; global: boolean };
 
+// Nager.Date's public-holiday list doesn't include these (they're
+// observances, not public holidays), but they're fixed calendar dates
+// every year, so just check them directly rather than calling out.
+const FIXED_HOLIDAYS: Record<string, string> = {
+  "12-24": "Christmas Eve",
+  "12-31": "New Year's Eve",
+};
+
 // Best-effort — a holiday miss just means a normal greeting instead of
 // a "Happy X" one, not a broken header.
 async function fetchHolidayName(now: Date): Promise<string | null> {
+  const todayKey = dayKeyInTimezone(now);
+  const fixed = FIXED_HOLIDAYS[todayKey.slice(5)];
+  if (fixed) return fixed;
+
   try {
     const year = now.getFullYear();
     const res = await fetch(
@@ -30,7 +43,6 @@ async function fetchHolidayName(now: Date): Promise<string | null> {
     );
     if (!res.ok) return null;
     const holidays: NagerHoliday[] = await res.json();
-    const todayKey = dayKeyInTimezone(now);
     // `global` filters out state-specific/optional observances (e.g.
     // "Truman Day") so only nationally-recognized holidays trigger it.
     const match = holidays.find((h) => h.date === todayKey && h.global);
@@ -80,6 +92,38 @@ function countPersonalEventsToday(raw: RawCalendarEvent[], todayKey: string): nu
     if (isToday) count++;
   }
   return count;
+}
+
+// Pulls a name out of titles like "John's Birthday", "Sarah Birthday",
+// or "Mom's bday" — falls back to null (rather than the raw title) so
+// a title with no clean name doesn't produce a nonsense sentence.
+function extractBirthdayName(title: string): string | null {
+  const match = title.trim().match(/^(.+?)(?:['’]s)?\s+(?:birthday|bday)\b/i);
+  const name = match?.[1]?.trim();
+  return name ? name : null;
+}
+
+function findBirthdaysToday(raw: RawCalendarEvent[], todayKey: string): string[] {
+  const names: string[] = [];
+
+  for (const item of raw) {
+    const title = item.summary ?? "";
+    if (!/\b(birthday|bday)\b/i.test(title)) continue;
+
+    const startRaw = item.start?.date ?? item.start?.dateTime;
+    const endRaw = item.end?.date ?? item.end?.dateTime;
+    if (!startRaw || !endRaw) continue;
+
+    const allDay = Boolean(item.start?.date && !item.start?.dateTime);
+    const isToday = allDay
+      ? startRaw <= todayKey && todayKey < endRaw
+      : dayKeyInTimezone(new Date(startRaw)) === todayKey;
+    if (!isToday) continue;
+
+    names.push(extractBirthdayName(title) ?? title.trim());
+  }
+
+  return names;
 }
 
 // Local-noon anchors on both sides cancel out any DST offset, so this
@@ -150,20 +194,32 @@ export async function GET() {
     );
     const outOfOffice = findNextOutOfOffice(oooLists, todayKey);
 
+    // Fetched unconditionally (not just on weekends) since birthdays
+    // are checked every day, regardless of day type.
+    const personalRawToday = personalToken
+      ? await fetchGoogleCalendarEvents(personalToken, dayWindowMin, dayWindowMax, 50)
+      : [];
+    const birthdays = findBirthdaysToday(personalRawToday, todayKey);
+
     const holidayName = await fetchHolidayName(now);
     if (holidayName) {
-      const body: DaySummaryResponse = { dayType: "holiday", holidayName, outOfOffice };
+      const body: DaySummaryResponse = {
+        dayType: "holiday",
+        holidayName,
+        outOfOffice,
+        birthdays,
+      };
       return NextResponse.json(body);
     }
 
     if (isWeekend(now)) {
-      const personalEventCount = personalToken
-        ? countPersonalEventsToday(
-            await fetchGoogleCalendarEvents(personalToken, dayWindowMin, dayWindowMax, 50),
-            todayKey,
-          )
-        : 0;
-      const body: DaySummaryResponse = { dayType: "weekend", personalEventCount, outOfOffice };
+      const personalEventCount = countPersonalEventsToday(personalRawToday, todayKey);
+      const body: DaySummaryResponse = {
+        dayType: "weekend",
+        personalEventCount,
+        outOfOffice,
+        birthdays,
+      };
       return NextResponse.json(body);
     }
 
@@ -173,7 +229,7 @@ export async function GET() {
           todayKey,
         )
       : { client: 0, internal: 0 };
-    const body: DaySummaryResponse = { dayType: "weekday", meetings, outOfOffice };
+    const body: DaySummaryResponse = { dayType: "weekday", meetings, outOfOffice, birthdays };
     return NextResponse.json(body);
   } catch (error) {
     const body: DaySummaryResponse = {

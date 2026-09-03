@@ -13,6 +13,7 @@ type DaySummaryResponse =
       meetings?: { client: number; internal: number };
       personalEventCount?: number;
       outOfOffice: { title: string; daysUntil: number } | null;
+      birthdays: string[];
     };
 
 type SecurityStatusResponse = { state: "home" | "away" };
@@ -27,6 +28,8 @@ const HOLIDAY_GREETING_OVERRIDES: Record<string, string> = {
   "Labour Day": "Happy Labor Day!",
   "Thanksgiving Day": "Happy Thanksgiving!",
   "Christmas Day": "Merry Christmas!",
+  "Christmas Eve": "Merry Christmas Eve!",
+  "New Year's Eve": "Happy New Year's Eve!",
 };
 
 function timeOfDayGreeting(): string {
@@ -64,6 +67,12 @@ function describeOutOfOffice(ooo: { title: string; daysUntil: number }): string 
   return `${ooo.daysUntil} days until Out of Office — ${ooo.title}`;
 }
 
+function joinNames(names: string[]): string {
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
 export function HeaderStatus() {
   const { data } = useFetchPoll<DaySummaryResponse>("/api/day-summary", POLL_MS);
   const { data: security } = useFetchPoll<SecurityStatusResponse>(
@@ -83,6 +92,11 @@ export function HeaderStatus() {
         )}
         <p className="text-hero-sub text-muted">{describeDay(data)}</p>
       </div>
+      {data.birthdays.length > 0 && (
+        <p className="text-label mt-[0.3vh] text-muted">
+          🎂 Don&apos;t forget to wish {joinNames(data.birthdays)} a happy birthday!
+        </p>
+      )}
       {data.outOfOffice && (
         <p className="text-label mt-[0.3vh] text-muted">
           🗓️ {describeOutOfOffice(data.outOfOffice)}
