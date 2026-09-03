@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# unpublished third-party APK mirror (Fire TV sideload aid, not shipped)
+public/fully-kiosk.apk

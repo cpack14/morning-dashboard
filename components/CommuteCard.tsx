@@ -12,10 +12,59 @@ type CommuteResponse =
       trafficDelayMinutes: number;
     };
 
+type CommutePlanResponse = {
+  suggestion: {
+    meetingTitle: string;
+    meetingStart: string;
+    leaveBy: string;
+    travelTimeMinutes: number;
+    trafficCondition: "light" | "average" | "heavy";
+    clampedByPreviousMeeting: boolean;
+    tight: boolean;
+  } | null;
+  reason?: string;
+};
+
+const CONDITION_COLOR: Record<string, string> = {
+  heavy: "text-accent-warn",
+  average: "text-muted",
+  light: "text-accent-personal",
+};
+
+function LeaveBySuggestion({ data }: { data: CommutePlanResponse }) {
+  if (!data.suggestion) return null;
+  const s = data.suggestion;
+
+  const leaveTime = new Date(s.leaveBy).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const meetingTime = new Date(s.meetingStart).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  return (
+    <div className="mt-auto border-t border-surface-border pt-[1vh]">
+      <p className={`text-body font-medium ${CONDITION_COLOR[s.trafficCondition]}`}>
+        Traffic is {s.trafficCondition} today — leave by {leaveTime}
+      </p>
+      <p className="text-label text-muted">
+        for &ldquo;{s.meetingTitle}&rdquo; at {meetingTime}
+        {s.tight && " · cutting it close"}
+      </p>
+    </div>
+  );
+}
+
 export function CommuteCard() {
   const { data, error } = useFetchPoll<CommuteResponse>(
     "/api/commute",
     60 * 1000,
+  );
+  const { data: planData } = useFetchPoll<CommutePlanResponse>(
+    "/api/commute-plan",
+    5 * 60 * 1000,
   );
 
   return (
@@ -26,7 +75,7 @@ export function CommuteCard() {
         <Unavailable reason={data.reason} />
       )}
       {!error && data && !("unavailable" in data) && (
-        <div>
+        <div className="flex h-full flex-col">
           <div className="text-hero font-semibold tabular-nums">
             {data.durationInTrafficMinutes}
             <span className="text-hero-sub font-normal text-muted"> min</span>
@@ -40,6 +89,7 @@ export function CommuteCard() {
               </span>
             )}
           </p>
+          {planData && <LeaveBySuggestion data={planData} />}
         </div>
       )}
     </Card>
