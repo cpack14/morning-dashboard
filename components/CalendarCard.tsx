@@ -7,6 +7,7 @@ type CalendarEvent = {
   id: string;
   title: string;
   start: string;
+  end: string;
   allDay: boolean;
   calendar: "work" | "personal";
   day: "today" | "tomorrow";
@@ -26,17 +27,32 @@ function formatTime(event: CalendarEvent) {
   });
 }
 
+function formatDuration(event: CalendarEvent) {
+  if (event.allDay) return null;
+  const totalMinutes = Math.round(
+    (new Date(event.end).getTime() - new Date(event.start).getTime()) / 60000,
+  );
+  if (totalMinutes <= 0) return null;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+}
+
 function EventRow({ event }: { event: CalendarEvent }) {
   const dotClass =
     event.calendar === "work" ? "bg-accent-work" : "bg-accent-personal";
+  const duration = formatDuration(event);
 
   return (
     <li className="flex items-baseline gap-[0.6vh] overflow-hidden">
       <span
         className={`h-[0.8vh] w-[0.8vh] shrink-0 rounded-full ${dotClass}`}
       />
-      <span className="text-body w-[5.5em] shrink-0 text-muted tabular-nums">
+      <span className="text-body w-[8.5em] shrink-0 text-muted tabular-nums">
         {formatTime(event)}
+        {duration && ` · ${duration}`}
       </span>
       <span className="text-body truncate">{event.title}</span>
     </li>

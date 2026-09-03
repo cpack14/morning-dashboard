@@ -10,6 +10,7 @@ type DashboardEvent = {
   id: string;
   title: string;
   start: string;
+  end: string;
   allDay: boolean;
   calendar: CalendarKey;
   day: "today" | "tomorrow";
@@ -58,7 +59,8 @@ export async function GET() {
       const raw = await fetchGoogleCalendarEvents(token, timeMin, timeMax);
       for (const item of raw) {
         const startRaw = item.start?.dateTime ?? item.start?.date;
-        if (!startRaw || !item.id) continue;
+        const endRaw = item.end?.dateTime ?? item.end?.date;
+        if (!startRaw || !endRaw || !item.id) continue;
 
         const allDay = Boolean(item.start?.date && !item.start?.dateTime);
         const dayKey = allDay
@@ -71,6 +73,7 @@ export async function GET() {
           id: item.id,
           title: item.summary ?? "(no title)",
           start: startRaw,
+          end: endRaw,
           allDay,
           calendar: key,
           day: dayKey === todayKey ? "today" : "tomorrow",
