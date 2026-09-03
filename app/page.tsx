@@ -5,6 +5,8 @@ import { CalendarCard } from "@/components/CalendarCard";
 import { GarminCard } from "@/components/GarminCard";
 import { TrafficMapCard } from "@/components/TrafficMapCard";
 
+export const dynamic = "force-dynamic";
+
 export default function Home() {
   return (
     <main className="mx-auto flex h-dvh max-w-[1800px] flex-col gap-[2vh] overflow-hidden p-[2.5vh]">

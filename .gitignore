@@ -43,3 +43,6 @@ next-env.d.ts
 
 # unpublished third-party APK mirror (Fire TV sideload aid, not shipped)
 public/fully-kiosk.apk
+
+# one-time Garmin login output (session tokens, not committed)
+garmin-tokens.json

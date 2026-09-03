@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 const HOURS_TO_SHOW = 6;
 
-function currentHourKey(timeZone: string) {
+function localDateParts(timeZone: string, date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
@@ -14,11 +14,16 @@ function currentHourKey(timeZone: string) {
     day: "2-digit",
     hour: "2-digit",
     hour12: false,
-  }).formatToParts(new Date());
+  }).formatToParts(date);
 
   const get = (type: string) => parts.find((p) => p.type === type)?.value;
   const hour = get("hour") === "24" ? "00" : get("hour");
-  return `${get("year")}-${get("month")}-${get("day")}T${hour}:00`;
+  return { dateStr: `${get("year")}-${get("month")}-${get("day")}`, hour };
+}
+
+function currentHourKey(timeZone: string) {
+  const { dateStr, hour } = localDateParts(timeZone, new Date());
+  return `${dateStr}T${hour}:00`;
 }
 
 // Open-Meteo's hourly.time entries are naive local wall-clock strings
@@ -55,7 +60,20 @@ export async function GET() {
   url.searchParams.set("hourly", "temperature_2m,weather_code");
   url.searchParams.set("temperature_unit", "fahrenheit");
   url.searchParams.set("timezone", "auto");
-  url.searchParams.set("forecast_days", "2");
+
+  // Open-Meteo's `forecast_days` appears to anchor "today" to the API's
+  // current UTC date rather than the requested location's local date,
+  // which causes an off-by-one once UTC has crossed midnight but the
+  // location hasn't (e.g. evening in US timezones). Request an explicit
+  // local date range instead so "today" always matches HOME_TIMEZONE.
+  const now = new Date();
+  const { dateStr: todayLocal } = localDateParts(HOME_TIMEZONE, now);
+  const { dateStr: tomorrowLocal } = localDateParts(
+    HOME_TIMEZONE,
+    new Date(now.getTime() + 24 * 60 * 60 * 1000),
+  );
+  url.searchParams.set("start_date", todayLocal);
+  url.searchParams.set("end_date", tomorrowLocal);
 
   try {
     const res = await fetch(url, { cache: "no-store" });
