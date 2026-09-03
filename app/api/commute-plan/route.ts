@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { HOME_TIMEZONE } from "@/lib/workout";
 import { fetchGoogleCalendarEvents } from "@/lib/googleCalendar";
+import { computeLeaveBy } from "@/lib/commuteLeaveBy";
 
 export const dynamic = "force-dynamic";
 
 const EARLY_CUTOFF_HOUR = 9;
-const ARRIVAL_BUFFER_MINUTES = 10;
 
 type TimedMeeting = { id: string; title: string; start: Date; end: Date };
 
@@ -82,29 +82,14 @@ export async function GET() {
     .filter((e) => e.id !== anchor.id && e.end.getTime() <= anchor.start.getTime())
     .sort((a, b) => b.end.getTime() - a.end.getTime())[0];
 
-  const arriveAt = new Date(
-    anchor.start.getTime() - ARRIVAL_BUFFER_MINUTES * 60 * 1000,
-  );
-
-  const url = `https://api.tomtom.com/routing/1/calculateRoute/${origin}:${destination}/json?key=${tomtomKey}&arriveAt=${arriveAt.toISOString()}&computeTravelTimeFor=all`;
-
   let travelTimeMinutes: number;
   let predictedDepartureTime: Date;
   let trafficCondition: "light" | "average" | "heavy";
   try {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) throw new Error(`TomTom returned ${res.status}`);
-    const data = await res.json();
-    const summary = data.routes?.[0]?.summary;
-    if (!summary) throw new Error("No route summary in TomTom response");
-    travelTimeMinutes = Math.round(summary.travelTimeInSeconds / 60);
-    predictedDepartureTime = new Date(summary.departureTime);
-
-    const freeFlow = summary.noTrafficTravelTimeInSeconds as number;
-    const predicted = summary.historicTrafficTravelTimeInSeconds as number;
-    const slowdownPct = freeFlow > 0 ? ((predicted - freeFlow) / freeFlow) * 100 : 0;
-    trafficCondition =
-      slowdownPct >= 20 ? "heavy" : slowdownPct >= 8 ? "average" : "light";
+    const result = await computeLeaveBy(anchor.start);
+    travelTimeMinutes = result.travelTimeMinutes;
+    predictedDepartureTime = result.leaveBy;
+    trafficCondition = result.trafficCondition;
   } catch (error) {
     return unavailable((error as Error).message);
   }

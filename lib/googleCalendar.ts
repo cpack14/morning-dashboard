@@ -30,6 +30,7 @@ export async function fetchGoogleCalendarEvents(
   refreshToken: string,
   timeMin: string,
   timeMax: string,
+  maxResults = 20,
 ): Promise<RawCalendarEvent[]> {
   const accessToken = await getGoogleAccessToken(refreshToken);
 
@@ -40,7 +41,7 @@ export async function fetchGoogleCalendarEvents(
   url.searchParams.set("timeMax", timeMax);
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
-  url.searchParams.set("maxResults", "20");
+  url.searchParams.set("maxResults", String(maxResults));
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },

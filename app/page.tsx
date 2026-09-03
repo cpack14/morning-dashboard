@@ -2,7 +2,7 @@ import { Clock } from "@/components/Clock";
 import { WeatherCard } from "@/components/WeatherCard";
 import { CommuteCard } from "@/components/CommuteCard";
 import { CalendarCard } from "@/components/CalendarCard";
-import { GarminCard } from "@/components/GarminCard";
+import { UpcomingEventsCard } from "@/components/UpcomingEventsCard";
 import { TrafficMapCard } from "@/components/TrafficMapCard";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ export default function Home() {
           <TrafficMapCard />
         </div>
         <CalendarCard />
-        <GarminCard />
+        <UpcomingEventsCard />
       </div>
     </main>
   );
