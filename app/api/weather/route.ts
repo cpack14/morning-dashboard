@@ -98,10 +98,11 @@ export async function GET() {
   url.searchParams.set("current", "temperature_2m,weather_code,is_day");
   url.searchParams.set(
     "daily",
-    "temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset",
+    "temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset,rain_sum,snowfall_sum",
   );
   url.searchParams.set("hourly", "temperature_2m,weather_code");
   url.searchParams.set("temperature_unit", "fahrenheit");
+  url.searchParams.set("precipitation_unit", "inch");
   url.searchParams.set("timezone", "auto");
 
   // Open-Meteo's `forecast_days` appears to anchor "today" to the API's
@@ -138,6 +139,8 @@ export async function GET() {
       lowF: Math.round(data.daily.temperature_2m_min[0]),
       sunrise: formatTimeLabel(data.daily.sunrise[0]),
       sunset: formatTimeLabel(data.daily.sunset[0]),
+      rainIn: Math.round((data.daily.rain_sum?.[0] ?? 0) * 100) / 100,
+      snowIn: Math.round((data.daily.snowfall_sum?.[0] ?? 0) * 100) / 100,
       ...describeWeatherCode(data.daily.weather_code[0]),
     };
 

@@ -22,6 +22,8 @@ type WeatherResponse =
         lowF: number;
         sunrise: string;
         sunset: string;
+        rainIn: number;
+        snowIn: number;
         label: string;
         icon: string;
       };
@@ -113,6 +115,13 @@ export function WeatherCard() {
               <p className="text-label whitespace-nowrap text-muted">
                 ☀️ {data.today.sunrise} · 🌇 {data.today.sunset}
               </p>
+              {(data.today.rainIn > 0.01 || data.today.snowIn > 0.01) && (
+                <p className="text-label whitespace-nowrap text-accent-work">
+                  {data.today.snowIn > 0.01 && `❄️ ${data.today.snowIn}in snow`}
+                  {data.today.snowIn > 0.01 && data.today.rainIn > 0.01 && " · "}
+                  {data.today.rainIn > 0.01 && `🌧️ ${data.today.rainIn}in rain`}
+                </p>
+              )}
             </div>
           </div>
 
