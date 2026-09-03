@@ -263,13 +263,13 @@ export function AlarmController() {
             <p className="text-hero-sub">Good morning!</p>
             <div className="flex gap-[2vh]">
               <button
-                autoFocus
                 onClick={handleManualStop}
                 className="text-body rounded-xl bg-accent-work px-[3vh] py-[1.5vh] font-medium text-foreground focus:outline-none focus:ring-4 focus:ring-white"
               >
                 Stop
               </button>
               <button
+                autoFocus
                 onClick={snoozeAlarm}
                 className="text-body rounded-xl border border-surface-border px-[3vh] py-[1.5vh] font-medium text-muted focus:outline-none focus:ring-4 focus:ring-white"
               >
