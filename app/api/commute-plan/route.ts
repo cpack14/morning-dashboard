@@ -32,6 +32,7 @@ type CommutePlanResponse =
   | {
       mode: "work" | "personal" | "church" | "bountiful";
       destinationLabel: string;
+      destinationCoords: string;
       hero: Hero;
       leaveBy?: LeaveBy;
     }
@@ -73,6 +74,7 @@ async function planWorkMeeting(now: Date) {
   return NextResponse.json<CommutePlanResponse>({
     mode: "work",
     destinationLabel: "Work",
+    destinationCoords: destination,
     hero,
     leaveBy,
   });
@@ -205,6 +207,7 @@ async function planPersonalEvent(now: Date) {
   return NextResponse.json<CommutePlanResponse>({
     mode: "personal",
     destinationLabel: anchor.title,
+    destinationCoords: destination,
     hero: {
       durationMinutes: leaveByResult.travelTimeMinutes,
       distanceMiles: leaveByResult.distanceMiles,
@@ -236,6 +239,7 @@ async function planFixedDestination(mode: "church" | "bountiful") {
     return NextResponse.json<CommutePlanResponse>({
       mode,
       destinationLabel: mode === "church" ? "Church" : "Bountiful",
+      destinationCoords: destination,
       hero: {
         durationMinutes: eta.durationInTrafficMinutes,
         distanceMiles: eta.distanceMiles,

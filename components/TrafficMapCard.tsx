@@ -2,12 +2,23 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Card, Unavailable } from "@/components/Card";
+import { useFetchPoll } from "@/lib/useFetchPoll";
 import type * as TT from "@tomtom-international/web-sdk-maps";
 
 const REFRESH_MS = 5 * 60 * 1000;
+const COMMUTE_PLAN_POLL_MS = 60 * 1000;
 const ROUTE_COLOR = "#5b9dff";
 const MODERATE_DELAY_COLOR = "#f59e0b";
 const SEVERE_DELAY_COLOR = "#ef4444";
+
+type CommutePlanResponse =
+  | { mode: "work" | "personal" | "church" | "bountiful"; destinationCoords: string }
+  | { mode: "unavailable"; reason: string };
+
+const DESTINATION_EMOJI: Record<string, string> = {
+  work: "💼",
+  church: "⛪",
+};
 
 // TomTom's traffic sections report a 0-4 magnitude: 0 unknown, 1 minor,
 // 2 moderate, 3 major, 4 undefined (usually a closure). Minor/unknown
@@ -89,17 +100,32 @@ export function TrafficMapCard() {
 
   const apiKey = process.env.NEXT_PUBLIC_TOMTOM_API_KEY;
   const homeCoords = process.env.NEXT_PUBLIC_HOME_COORDS;
-  const workCoords = process.env.NEXT_PUBLIC_WORK_COORDS;
+  // Used only to frame the default view when there's no active
+  // destination to route to — never shown as a marker or route then.
+  const fallbackFramingCoords = process.env.NEXT_PUBLIC_WORK_COORDS;
+
+  // Mirrors whatever the Current Commute card is showing, so the map
+  // always routes to the same place — work, a personal event, or the
+  // Sunday church/Bountiful destinations.
+  const { data: plan } = useFetchPoll<CommutePlanResponse>(
+    "/api/commute-plan",
+    COMMUTE_PLAN_POLL_MS,
+  );
+  const destinationCoords = plan && plan.mode !== "unavailable" ? plan.destinationCoords : null;
+  const destinationEmoji =
+    (plan && plan.mode !== "unavailable" && DESTINATION_EMOJI[plan.mode]) || "📍";
 
   useEffect(() => {
-    if (!apiKey || !homeCoords || !workCoords || !containerRef.current) return;
+    if (!apiKey || !homeCoords || !plan || !containerRef.current) return;
 
     let cancelled = false;
     let refreshTimer: ReturnType<typeof setInterval> | undefined;
     let map: TT.Map | undefined;
 
     const origin = toLngLat(homeCoords);
-    const destination = toLngLat(workCoords);
+    const destination = destinationCoords ? toLngLat(destinationCoords) : null;
+    const framingDestination =
+      destination ?? (fallbackFramingCoords ? toLngLat(fallbackFramingCoords) : null);
 
     (async () => {
       const [{ default: tt }] = await Promise.all([
@@ -121,10 +147,22 @@ export function TrafficMapCard() {
         new tt.Marker({ element: makeMarkerIcon("🏠", "#4ade80") })
           .setLngLat(origin)
           .addTo(map!);
-        new tt.Marker({ element: makeMarkerIcon("💼", "#ef4444") })
-          .setLngLat(destination)
-          .addTo(map!);
+        if (destination) {
+          new tt.Marker({ element: makeMarkerIcon(destinationEmoji, "#ef4444") })
+            .setLngLat(destination)
+            .addTo(map!);
+        } else {
+          // No specific place to route to — fall back to the general
+          // area's live traffic-flow coloring instead of a blank map.
+          map!.showTrafficFlow();
+          if (framingDestination) {
+            const bounds = new tt.LngLatBounds(origin, origin).extend(framingDestination);
+            map!.fitBounds(bounds, { padding: 30 });
+          }
+        }
       });
+
+      if (!destination) return;
 
       const drawRoute = async () => {
         try {
@@ -214,12 +252,20 @@ export function TrafficMapCard() {
       if (refreshTimer) clearInterval(refreshTimer);
       map?.remove();
     };
-  }, [apiKey, homeCoords, workCoords]);
+  }, [apiKey, homeCoords, plan, destinationCoords, destinationEmoji, fallbackFramingCoords]);
 
-  if (!apiKey || !homeCoords || !workCoords) {
+  if (!apiKey || !homeCoords) {
     return (
       <Card title="Traffic">
-        <Unavailable reason="NEXT_PUBLIC_TOMTOM_API_KEY / NEXT_PUBLIC_HOME_COORDS / NEXT_PUBLIC_WORK_COORDS not configured" />
+        <Unavailable reason="NEXT_PUBLIC_TOMTOM_API_KEY / NEXT_PUBLIC_HOME_COORDS not configured" />
+      </Card>
+    );
+  }
+
+  if (!plan) {
+    return (
+      <Card title="Traffic">
+        <Unavailable reason="loading" />
       </Card>
     );
   }
