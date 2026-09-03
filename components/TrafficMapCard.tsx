@@ -66,35 +66,6 @@ async function fetchRouteWithTraffic(
   return { coords, sections: route.sections ?? [] };
 }
 
-// Test-only: ?trafficDebug=1 injects two fake traffic sections (one
-// moderate, one severe) spread across the route, so the coloring can
-// be previewed without waiting for real congestion to appear.
-function randomDebugSections(pointCount: number): TomTomRouteSection[] {
-  const randIn = (min: number, max: number) =>
-    Math.floor(min + Math.random() * (max - min));
-
-  const modStart = randIn(0, Math.floor(pointCount * 0.4));
-  const modEnd = randIn(modStart + 5, Math.floor(pointCount * 0.45));
-
-  const sevStart = randIn(Math.floor(pointCount * 0.6), Math.floor(pointCount * 0.9));
-  const sevEnd = randIn(sevStart + 5, pointCount - 1);
-
-  return [
-    {
-      startPointIndex: modStart,
-      endPointIndex: modEnd,
-      sectionType: "traffic",
-      magnitudeOfDelay: 2,
-    },
-    {
-      startPointIndex: sevStart,
-      endPointIndex: sevEnd,
-      sectionType: "traffic",
-      magnitudeOfDelay: 3,
-    },
-  ];
-}
-
 function makeMarkerIcon(emoji: string, background: string): HTMLElement {
   const el = document.createElement("div");
   el.textContent = emoji;
@@ -129,10 +100,6 @@ export function TrafficMapCard() {
 
     const origin = toLngLat(homeCoords);
     const destination = toLngLat(workCoords);
-    const debugTraffic = new URLSearchParams(window.location.search).get(
-      "trafficDebug",
-    ) === "1";
-    let debugSections: TomTomRouteSection[] | null = null;
 
     (async () => {
       const [{ default: tt }] = await Promise.all([
@@ -151,28 +118,22 @@ export function TrafficMapCard() {
       });
 
       map.on("load", () => {
-        new tt.Marker({ element: makeMarkerIcon("🏠", "#5b9dff") })
+        new tt.Marker({ element: makeMarkerIcon("🏠", "#4ade80") })
           .setLngLat(origin)
           .addTo(map!);
-        new tt.Marker({ element: makeMarkerIcon("💼", "#4ade80") })
+        new tt.Marker({ element: makeMarkerIcon("💼", "#ef4444") })
           .setLngLat(destination)
           .addTo(map!);
       });
 
       const drawRoute = async () => {
         try {
-          const { coords, sections: liveSections } = await fetchRouteWithTraffic(
+          const { coords, sections } = await fetchRouteWithTraffic(
             apiKey,
             origin,
             destination,
           );
           if (cancelled || !map || !coords.length) return;
-
-          let sections = liveSections;
-          if (debugTraffic) {
-            if (!debugSections) debugSections = randomDebugSections(coords.length);
-            sections = debugSections;
-          }
 
           const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
             type: "Feature",
