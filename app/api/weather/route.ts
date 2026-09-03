@@ -1,7 +1,37 @@
 import { NextResponse } from "next/server";
 import { describeWeatherCode } from "@/lib/weatherCodes";
+import { HOME_TIMEZONE } from "@/lib/workout";
 
 export const dynamic = "force-dynamic";
+
+const HOURS_TO_SHOW = 6;
+
+function currentHourKey(timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+
+  const get = (type: string) => parts.find((p) => p.type === type)?.value;
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return `${get("year")}-${get("month")}-${get("day")}T${hour}:00`;
+}
+
+// Open-Meteo's hourly.time entries are naive local wall-clock strings
+// (e.g. "2026-09-02T19:00") for the requested lat/lon, which matches
+// HOME_TIMEZONE by construction. Format the label from the string
+// directly rather than via Date, so it's correct regardless of the
+// timezone of whatever device ends up rendering this.
+function formatHourLabel(isoLocal: string) {
+  const hour24 = Number(isoLocal.slice(11, 13));
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour12} ${period}`;
+}
 
 export async function GET() {
   const lat = process.env.HOME_LAT;
@@ -22,6 +52,7 @@ export async function GET() {
     "daily",
     "temperature_2m_max,temperature_2m_min,weather_code",
   );
+  url.searchParams.set("hourly", "temperature_2m,weather_code");
   url.searchParams.set("temperature_unit", "fahrenheit");
   url.searchParams.set("timezone", "auto");
   url.searchParams.set("forecast_days", "2");
@@ -44,13 +75,24 @@ export async function GET() {
       ...describeWeatherCode(data.daily.weather_code[0]),
     };
 
-    const tomorrow = {
-      highF: Math.round(data.daily.temperature_2m_max[1]),
-      lowF: Math.round(data.daily.temperature_2m_min[1]),
-      ...describeWeatherCode(data.daily.weather_code[1]),
-    };
+    const nowKey = currentHourKey(HOME_TIMEZONE);
+    const startIndex = (data.hourly.time as string[]).findIndex(
+      (t) => t >= nowKey,
+    );
+    const sliceStart = startIndex === -1 ? 0 : startIndex;
 
-    return NextResponse.json({ current, today, tomorrow });
+    const hourly = (data.hourly.time as string[])
+      .slice(sliceStart, sliceStart + HOURS_TO_SHOW)
+      .map((time, i) => {
+        const idx = sliceStart + i;
+        return {
+          hourLabel: formatHourLabel(time),
+          tempF: Math.round(data.hourly.temperature_2m[idx]),
+          ...describeWeatherCode(data.hourly.weather_code[idx]),
+        };
+      });
+
+    return NextResponse.json({ current, today, hourly });
   } catch (error) {
     return NextResponse.json(
       { unavailable: true, reason: (error as Error).message },

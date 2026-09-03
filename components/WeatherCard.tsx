@@ -3,6 +3,13 @@
 import { Card, Unavailable } from "@/components/Card";
 import { useFetchPoll } from "@/lib/useFetchPoll";
 
+type HourlyForecast = {
+  hourLabel: string;
+  tempF: number;
+  label: string;
+  icon: string;
+};
+
 type WeatherResponse =
   | {
       unavailable: true;
@@ -11,7 +18,7 @@ type WeatherResponse =
   | {
       current: { tempF: number; label: string; icon: string };
       today: { highF: number; lowF: number; label: string; icon: string };
-      tomorrow: { highF: number; lowF: number; label: string; icon: string };
+      hourly: HourlyForecast[];
     };
 
 export function WeatherCard() {
@@ -39,24 +46,23 @@ export function WeatherCard() {
             {data.current.label}
           </p>
 
-          <div className="mt-auto grid grid-cols-2 gap-[1vh] border-t border-surface-border pt-[1vh]">
-            <div>
-              <p className="text-label text-muted uppercase tracking-wide">
-                Today
-              </p>
-              <p className="text-hero-sub">
-                {data.today.icon} {data.today.highF}° / {data.today.lowF}°
-              </p>
-            </div>
-            <div>
-              <p className="text-label text-muted uppercase tracking-wide">
-                Tomorrow
-              </p>
-              <p className="text-hero-sub">
-                {data.tomorrow.icon} {data.tomorrow.highF}° /{" "}
-                {data.tomorrow.lowF}°
-              </p>
-            </div>
+          <div className="border-t border-surface-border pt-[1vh]">
+            <p className="text-label text-muted uppercase tracking-wide">
+              Today
+            </p>
+            <p className="text-hero-sub">
+              {data.today.icon} {data.today.highF}° / {data.today.lowF}°
+            </p>
+          </div>
+
+          <div className="mt-auto flex justify-between gap-[0.5vh] border-t border-surface-border pt-[1vh]">
+            {data.hourly.map((h, i) => (
+              <div key={i} className="flex flex-col items-center">
+                <p className="text-label text-muted">{h.hourLabel}</p>
+                <p className="text-body">{h.icon}</p>
+                <p className="text-body tabular-nums">{h.tempF}°</p>
+              </div>
+            ))}
           </div>
         </div>
       )}
