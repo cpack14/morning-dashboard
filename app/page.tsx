@@ -6,6 +6,7 @@ import { CalendarCard } from "@/components/CalendarCard";
 import { UpcomingEventsCard } from "@/components/UpcomingEventsCard";
 import { TrafficMapCard } from "@/components/TrafficMapCard";
 import { AlarmController } from "@/components/AlarmController";
+import { WeatherEffects } from "@/components/WeatherEffects";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export default function Home() {
   return (
     <main className="mx-auto flex h-dvh max-w-[1800px] flex-col gap-[0.8vh] overflow-hidden p-[1.5vh]">
       <AlarmController />
+      <WeatherEffects />
       <div className="flex shrink-0 items-start justify-between gap-[1vh]">
         <Clock />
         <HeaderStatus />

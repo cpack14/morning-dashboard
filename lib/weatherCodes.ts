@@ -32,3 +32,46 @@ export const WEATHER_CODES: Record<number, { label: string; icon: string }> = {
 export function describeWeatherCode(code: number) {
   return WEATHER_CODES[code] ?? { label: "Unknown", icon: "❔" };
 }
+
+export type WeatherEffectCategory =
+  | "clear"
+  | "cloudy"
+  | "fog"
+  | "rain"
+  | "snow"
+  | "thunderstorm";
+
+// WMO codes grouped for the on-screen weather effect (falling rain/snow,
+// fog haze, etc.) — a coarser view of the same codes describeWeatherCode
+// already maps to labels/icons, so both stay driven by one source.
+const RAIN_CODES = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82]);
+const SNOW_CODES = new Set([71, 73, 75, 77, 85, 86]);
+const FOG_CODES = new Set([45, 48]);
+const THUNDERSTORM_CODES = new Set([95, 96, 99]);
+const CLOUDY_CODES = new Set([2, 3]);
+
+// Light/moderate/heavy, used to scale particle count and fall speed.
+const LIGHT_CODES = new Set([51, 56, 61, 71, 80]);
+const HEAVY_CODES = new Set([55, 57, 65, 66, 67, 75, 77, 82, 86]);
+
+export function categorizeWeatherCode(code: number): {
+  category: WeatherEffectCategory;
+  intensity: 1 | 2 | 3;
+} {
+  let category: WeatherEffectCategory = "clear";
+  if (THUNDERSTORM_CODES.has(code)) category = "thunderstorm";
+  else if (SNOW_CODES.has(code)) category = "snow";
+  else if (RAIN_CODES.has(code)) category = "rain";
+  else if (FOG_CODES.has(code)) category = "fog";
+  else if (CLOUDY_CODES.has(code)) category = "cloudy";
+
+  const intensity: 1 | 2 | 3 = THUNDERSTORM_CODES.has(code)
+    ? 3
+    : LIGHT_CODES.has(code)
+      ? 1
+      : HEAVY_CODES.has(code)
+        ? 3
+        : 2;
+
+  return { category, intensity };
+}

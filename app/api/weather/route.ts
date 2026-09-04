@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { describeWeatherCode } from "@/lib/weatherCodes";
+import { describeWeatherCode, categorizeWeatherCode } from "@/lib/weatherCodes";
 import { HOME_TIMEZONE } from "@/lib/workout";
 
 export const dynamic = "force-dynamic";
@@ -132,6 +132,7 @@ export async function GET() {
     const current = {
       tempF: Math.round(data.current.temperature_2m),
       ...describeWeatherCode(data.current.weather_code),
+      ...categorizeWeatherCode(data.current.weather_code),
     };
 
     const today = {

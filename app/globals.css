@@ -51,3 +51,45 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+@keyframes weather-fall {
+  from {
+    transform: translateY(-10vh);
+  }
+  to {
+    transform: translateY(110vh);
+  }
+}
+
+@keyframes weather-drift {
+  from {
+    transform: translateY(-10vh) translateX(-10px);
+  }
+  50% {
+    transform: translateY(50vh) translateX(10px);
+  }
+  to {
+    transform: translateY(110vh) translateX(-10px);
+  }
+}
+
+@keyframes weather-fog-drift {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes weather-flash {
+  0%,
+  92%,
+  100% {
+    opacity: 0;
+  }
+  94%,
+  96% {
+    opacity: 0.5;
+  }
+}

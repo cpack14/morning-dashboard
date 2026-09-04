@@ -62,9 +62,9 @@ function describeDay(data: Extract<DaySummaryResponse, { dayType: string }>): st
 }
 
 function describeOutOfOffice(ooo: { title: string; daysUntil: number }): string {
-  if (ooo.daysUntil === 0) return `Out of office today — ${ooo.title}`;
-  if (ooo.daysUntil === 1) return `1 day until Out of Office — ${ooo.title}`;
-  return `${ooo.daysUntil} days until Out of Office — ${ooo.title}`;
+  if (ooo.daysUntil === 0) return `${ooo.title} is today`;
+  if (ooo.daysUntil === 1) return `1 day until ${ooo.title}`;
+  return `${ooo.daysUntil} days until ${ooo.title}`;
 }
 
 function joinNames(names: string[]): string {
