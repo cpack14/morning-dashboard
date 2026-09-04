@@ -12,9 +12,14 @@ const ROUTE_COLOR = "#5b9dff";
 const MODERATE_DELAY_COLOR = "#f59e0b";
 const SEVERE_DELAY_COLOR = "#ef4444";
 const TYPICAL_ROUTE_COLOR = "#8b96ab";
+const TYPICAL_ROUTE_OPACITY = 0.4;
+const TYPICAL_SEVERITY_OPACITY = 0.6;
 // Below this, a live-vs-typical gap is just normal noise, not worth
 // calling out.
 const NOTABLE_TIME_DIFF_MINUTES = 2;
+// TomTom's calculateRoute caps a single request at 150 waypoints —
+// leave room for origin + destination.
+const MAX_ROUTE_WAYPOINTS = 148;
 
 type CommutePlanResponse =
   | { mode: "work" | "personal" | "church" | "bountiful"; destinationCoords: string }
@@ -122,6 +127,44 @@ async function fetchTypicalRoute(
   };
 }
 
+function downsample<T>(points: T[], maxCount: number): T[] {
+  if (points.length <= maxCount) return points;
+  const step = points.length / maxCount;
+  return Array.from({ length: maxCount }, (_, i) => points[Math.floor(i * step)]);
+}
+
+// Forces a route through the typical route's own path (as waypoints)
+// while still requesting live traffic, so the "usual" route can be
+// segment-colored by current delay the same way the live route is —
+// traffic=false alone never returns section data, since there's no
+// live congestion to report on a purely historical-speed route.
+async function fetchLiveTrafficAlongPath(
+  apiKey: string,
+  pathCoords: [number, number][],
+  origin: [number, number],
+  destination: [number, number],
+): Promise<{ coords: [number, number][]; sections: TomTomRouteSection[] } | null> {
+  const waypoints = downsample(pathCoords, MAX_ROUTE_WAYPOINTS);
+  const locations = [origin, ...waypoints, destination]
+    .map((p) => `${p[1]},${p[0]}`)
+    .join(":");
+
+  const url =
+    `https://api.tomtom.com/routing/1/calculateRoute/${locations}/json` +
+    `?key=${apiKey}&routeType=fastest&traffic=true&sectionType=traffic`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data: TomTomRoutingResponse = await res.json();
+    const route = data.routes?.[0];
+    if (!route) return null;
+    return { coords: routeCoords(route), sections: route.sections ?? [] };
+  } catch {
+    return null;
+  }
+}
+
 // TomTom's incident iconCategory codes. 6 (jam) is deliberately
 // excluded — that's already conveyed by the route's own color-coding,
 // so surfacing it here would just be redundant noise. Weather-only
@@ -208,6 +251,28 @@ async function fetchNotableIncidents(
   } catch {
     return [];
   }
+}
+
+function buildSeverityFeatures(
+  coords: [number, number][],
+  sections: TomTomRouteSection[],
+): GeoJSON.Feature<GeoJSON.LineString, { color: string }>[] {
+  return sections
+    .filter((s) => s.sectionType?.toLowerCase() === "traffic")
+    .map((s) => {
+      const color = delayColor(s.magnitudeOfDelay);
+      if (!color) return null;
+      const feature: GeoJSON.Feature<GeoJSON.LineString, { color: string }> = {
+        type: "Feature",
+        properties: { color },
+        geometry: {
+          type: "LineString",
+          coordinates: coords.slice(s.startPointIndex, s.endPointIndex + 1),
+        },
+      };
+      return feature;
+    })
+    .filter((f): f is NonNullable<typeof f> => f !== null);
 }
 
 function makeMarkerIcon(emoji: string, background: string): HTMLElement {
@@ -336,16 +401,25 @@ export function TrafficMapCard() {
             typical ? { liveMinutes: travelTimeMinutes, typicalMinutes: typical.travelTimeMinutes } : null,
           );
 
+          // Live traffic along the *typical* path — lets the usual
+          // route be segment-colored by current delay too, not just
+          // drawn as a flat line. Sequenced after `typical` resolves
+          // since it needs that path's coordinates as input.
+          const typicalTraffic = typical
+            ? await fetchLiveTrafficAlongPath(apiKey, typical.coords, origin, destination)
+            : null;
+          if (cancelled || !map) return;
+          const typicalDrawCoords = typicalTraffic?.coords ?? typical?.coords;
+
           // Drawn first so it sits underneath the live route below —
-          // when the two routes match, the live line fully covers it
-          // and it's invisible; it only becomes visible where the
-          // live route (routed around live traffic/closures) actually
-          // diverges from the typical historical-speed route.
-          if (typical) {
+          // rendered at lower opacity throughout so it always reads
+          // as "the usual way," never competing with the live route
+          // for attention even where the two paths coincide.
+          if (typicalDrawCoords) {
             const typicalGeojson: GeoJSON.Feature<GeoJSON.LineString> = {
               type: "Feature",
               properties: {},
-              geometry: { type: "LineString", coordinates: typical.coords },
+              geometry: { type: "LineString", coordinates: typicalDrawCoords },
             };
             const typicalSource = map.getSource("route-typical") as
               | TT.GeoJSONSource
@@ -361,7 +435,35 @@ export function TrafficMapCard() {
                 paint: {
                   "line-color": TYPICAL_ROUTE_COLOR,
                   "line-width": 4,
-                  "line-dasharray": [2, 2],
+                  "line-opacity": TYPICAL_ROUTE_OPACITY,
+                },
+              });
+            }
+
+            const typicalSeverityGeojson: GeoJSON.FeatureCollection = {
+              type: "FeatureCollection",
+              features: typicalTraffic
+                ? buildSeverityFeatures(typicalTraffic.coords, typicalTraffic.sections)
+                : [],
+            };
+            const typicalSeveritySource = map.getSource("route-typical-severity") as
+              | TT.GeoJSONSource
+              | undefined;
+            if (typicalSeveritySource) {
+              typicalSeveritySource.setData(typicalSeverityGeojson);
+            } else {
+              map.addSource("route-typical-severity", {
+                type: "geojson",
+                data: typicalSeverityGeojson,
+              });
+              map.addLayer({
+                id: "route-typical-severity-line",
+                type: "line",
+                source: "route-typical-severity",
+                paint: {
+                  "line-color": ["get", "color"],
+                  "line-width": 4,
+                  "line-opacity": TYPICAL_SEVERITY_OPACITY,
                 },
               });
             }
@@ -385,25 +487,9 @@ export function TrafficMapCard() {
             });
           }
 
-          const severityFeatures = sections
-            .filter((s) => s.sectionType?.toLowerCase() === "traffic")
-            .map((s) => {
-              const color = delayColor(s.magnitudeOfDelay);
-              if (!color) return null;
-              const feature: GeoJSON.Feature<GeoJSON.LineString, { color: string }> = {
-                type: "Feature",
-                properties: { color },
-                geometry: {
-                  type: "LineString",
-                  coordinates: coords.slice(s.startPointIndex, s.endPointIndex + 1),
-                },
-              };
-              return feature;
-            })
-            .filter((f): f is NonNullable<typeof f> => f !== null);
           const severityGeojson: GeoJSON.FeatureCollection = {
             type: "FeatureCollection",
-            features: severityFeatures,
+            features: buildSeverityFeatures(coords, sections),
           };
 
           const severitySource = map.getSource("route-severity") as
@@ -425,7 +511,7 @@ export function TrafficMapCard() {
             });
           }
 
-          const bounds = [...coords, ...(typical?.coords ?? [])].reduce(
+          const bounds = [...coords, ...(typicalDrawCoords ?? [])].reduce(
             (b, c) => b.extend(c),
             new tt.LngLatBounds(coords[0], coords[0]),
           );
