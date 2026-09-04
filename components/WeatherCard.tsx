@@ -10,6 +10,14 @@ type HourlyForecast = {
   icon: string;
 };
 
+type DailyForecast = {
+  dayLabel: string;
+  highF: number;
+  lowF: number;
+  label: string;
+  icon: string;
+};
+
 type WeatherResponse =
   | {
       unavailable: true;
@@ -28,6 +36,7 @@ type WeatherResponse =
         icon: string;
       };
       hourly: HourlyForecast[];
+      upcoming: DailyForecast[];
       aqi: { aqi: number; category: string } | null;
     };
 
@@ -79,11 +88,25 @@ export function WeatherCard() {
         <div className="flex h-full flex-col">
           <div className="flex items-start justify-between gap-[1vh]">
             <div>
-              <div className="flex items-center gap-[1vh]">
-                <span className="text-hero">{data.current.icon}</span>
-                <span className="text-hero font-semibold tabular-nums">
-                  {data.current.tempF}°
-                </span>
+              <div className="flex items-start gap-[1vh]">
+                <div className="flex items-center gap-[1vh]">
+                  <span className="text-hero">{data.current.icon}</span>
+                  <span className="text-hero font-semibold tabular-nums">
+                    {data.current.tempF}°
+                  </span>
+                </div>
+                {data.upcoming.length > 0 && (
+                  <div className="flex flex-col gap-[0.2vh] pt-[0.5vh]">
+                    {data.upcoming.map((d, i) => (
+                      <p
+                        key={i}
+                        className="text-label whitespace-nowrap text-muted"
+                      >
+                        {d.dayLabel} {d.icon} {d.highF}°/{d.lowF}°
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
               <p className="text-hero-sub mt-[0.1vh] leading-tight text-muted">
                 {data.current.label}

@@ -5,6 +5,7 @@ import { HOME_TIMEZONE } from "@/lib/workout";
 export const dynamic = "force-dynamic";
 
 const HOURS_TO_SHOW = 6;
+const UPCOMING_DAYS_TO_SHOW = 3;
 
 function localDateParts(timeZone: string, date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -36,6 +37,15 @@ function formatHourLabel(isoLocal: string) {
   const period = hour24 >= 12 ? "PM" : "AM";
   const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
   return `${hour12} ${period}`;
+}
+
+// Daily dates come as bare "YYYY-MM-DD" (no time component). Parsing
+// that string directly with `new Date()` reads it as UTC midnight,
+// which can shift a day off once rendered — parsing the components
+// into a local Date sidesteps that entirely.
+function formatDayLabel(dateStr: string) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short" });
 }
 
 // Same naive-local-string handling as formatHourLabel, but keeping
@@ -112,12 +122,12 @@ export async function GET() {
   // local date range instead so "today" always matches HOME_TIMEZONE.
   const now = new Date();
   const { dateStr: todayLocal } = localDateParts(HOME_TIMEZONE, now);
-  const { dateStr: tomorrowLocal } = localDateParts(
+  const { dateStr: endDateLocal } = localDateParts(
     HOME_TIMEZONE,
-    new Date(now.getTime() + 24 * 60 * 60 * 1000),
+    new Date(now.getTime() + UPCOMING_DAYS_TO_SHOW * 24 * 60 * 60 * 1000),
   );
   url.searchParams.set("start_date", todayLocal);
-  url.searchParams.set("end_date", tomorrowLocal);
+  url.searchParams.set("end_date", endDateLocal);
 
   try {
     const [res, aqi] = await Promise.all([
@@ -145,6 +155,18 @@ export async function GET() {
       ...describeWeatherCode(data.daily.weather_code[0]),
     };
 
+    const upcoming = (data.daily.time as string[])
+      .slice(1, 1 + UPCOMING_DAYS_TO_SHOW)
+      .map((dateStr, i) => {
+        const idx = i + 1;
+        return {
+          dayLabel: formatDayLabel(dateStr),
+          highF: Math.round(data.daily.temperature_2m_max[idx]),
+          lowF: Math.round(data.daily.temperature_2m_min[idx]),
+          ...describeWeatherCode(data.daily.weather_code[idx]),
+        };
+      });
+
     const nowKey = currentHourKey(HOME_TIMEZONE);
     const startIndex = (data.hourly.time as string[]).findIndex(
       (t) => t >= nowKey,
@@ -162,7 +184,7 @@ export async function GET() {
         };
       });
 
-    return NextResponse.json({ current, today, hourly, aqi });
+    return NextResponse.json({ current, today, hourly, upcoming, aqi });
   } catch (error) {
     return NextResponse.json(
       { unavailable: true, reason: (error as Error).message },
