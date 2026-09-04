@@ -68,9 +68,7 @@ export function CalendarCard() {
   const notConfigured =
     data && !data.accounts.work && !data.accounts.personal;
 
-  const now = new Date();
-  const upcoming =
-    data?.events.filter((e) => e.allDay || new Date(e.end) > now) ?? [];
+  const events = data?.events ?? [];
 
   return (
     <Card title="Today's Meetings">
@@ -81,11 +79,11 @@ export function CalendarCard() {
       )}
       {!error && data && !notConfigured && (
         <>
-          {upcoming.length === 0 ? (
-            <p className="text-body text-muted">Nothing left today</p>
+          {events.length === 0 ? (
+            <p className="text-body text-muted">No meetings today</p>
           ) : (
             <FittedList
-              items={upcoming.map((e) => (
+              items={events.map((e) => (
                 <EventRow key={e.id} event={e} />
               ))}
             />
