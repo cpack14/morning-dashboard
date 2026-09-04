@@ -11,6 +11,10 @@ const COMMUTE_PLAN_POLL_MS = 60 * 1000;
 const ROUTE_COLOR = "#5b9dff";
 const MODERATE_DELAY_COLOR = "#f59e0b";
 const SEVERE_DELAY_COLOR = "#ef4444";
+const TYPICAL_ROUTE_COLOR = "#8b96ab";
+// Below this, a live-vs-typical gap is just normal noise, not worth
+// calling out.
+const NOTABLE_TIME_DIFF_MINUTES = 2;
 
 type CommutePlanResponse =
   | { mode: "work" | "personal" | "church" | "bountiful"; destinationCoords: string }
@@ -47,8 +51,15 @@ type TomTomRoutingResponse = {
   routes: {
     legs: { points: { latitude: number; longitude: number }[] }[];
     sections?: TomTomRouteSection[];
+    summary?: { travelTimeInSeconds: number };
   }[];
 };
+
+function routeCoords(route: TomTomRoutingResponse["routes"][number]): [number, number][] {
+  return route.legs.flatMap((leg) =>
+    leg.points.map((p): [number, number] => [p.longitude, p.latitude]),
+  );
+}
 
 // Calls TomTom's routing REST API directly rather than going through
 // @tomtom-international/web-sdk-services' calculateRoute/
@@ -59,7 +70,11 @@ async function fetchRouteWithTraffic(
   apiKey: string,
   origin: [number, number],
   destination: [number, number],
-): Promise<{ coords: [number, number][]; sections: TomTomRouteSection[] }> {
+): Promise<{
+  coords: [number, number][];
+  sections: TomTomRouteSection[];
+  travelTimeMinutes: number;
+}> {
   const url =
     `https://api.tomtom.com/routing/1/calculateRoute/` +
     `${origin[1]},${origin[0]}:${destination[1]},${destination[0]}/json` +
@@ -72,11 +87,39 @@ async function fetchRouteWithTraffic(
   const route = data.routes?.[0];
   if (!route) throw new Error("No route returned");
 
-  const coords: [number, number][] = route.legs.flatMap((leg) =>
-    leg.points.map((p): [number, number] => [p.longitude, p.latitude]),
-  );
+  return {
+    coords: routeCoords(route),
+    sections: route.sections ?? [],
+    travelTimeMinutes: Math.round((route.summary?.travelTimeInSeconds ?? 0) / 60),
+  };
+}
 
-  return { coords, sections: route.sections ?? [] };
+// Same route, but computed from typical/historical speeds rather than
+// live traffic — this is the route you'd take on an ordinary day, and
+// deliberately won't route around a live-only closure/jam the way the
+// traffic-aware call above does. Drawn underneath the live route, so
+// it only becomes visible when the two actually diverge.
+async function fetchTypicalRoute(
+  apiKey: string,
+  origin: [number, number],
+  destination: [number, number],
+): Promise<{ coords: [number, number][]; travelTimeMinutes: number }> {
+  const url =
+    `https://api.tomtom.com/routing/1/calculateRoute/` +
+    `${origin[1]},${origin[0]}:${destination[1]},${destination[0]}/json` +
+    `?key=${apiKey}&routeType=fastest&traffic=false`;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`TomTom routing request failed (${res.status})`);
+  const data: TomTomRoutingResponse = await res.json();
+
+  const route = data.routes?.[0];
+  if (!route) throw new Error("No route returned");
+
+  return {
+    coords: routeCoords(route),
+    travelTimeMinutes: Math.round((route.summary?.travelTimeInSeconds ?? 0) / 60),
+  };
 }
 
 // TomTom's incident iconCategory codes. 6 (jam) is deliberately
@@ -93,7 +136,22 @@ const NOTABLE_INCIDENT_ICON: Record<number, string> = {
   14: "🛑", // broken down vehicle
 };
 
-type NotableIncident = { description: string; icon: string };
+type NotableIncident = { description: string; icon: string; position: [number, number] | null };
+
+type IncidentGeometry =
+  | { type: "Point"; coordinates: [number, number] }
+  | { type: "LineString"; coordinates: [number, number][] };
+
+// A LineString incident (e.g. a closed stretch of road) doesn't have a
+// single location — use its midpoint as a representative marker spot.
+function incidentPosition(geometry: IncidentGeometry | undefined): [number, number] | null {
+  if (!geometry) return null;
+  if (geometry.type === "Point") return geometry.coordinates;
+  if (geometry.type === "LineString" && geometry.coordinates.length > 0) {
+    return geometry.coordinates[Math.floor(geometry.coordinates.length / 2)];
+  }
+  return null;
+}
 
 // Fetches incidents in a bounding box around the route and keeps only
 // the notable, non-jam ones with a human-readable description.
@@ -114,7 +172,7 @@ async function fetchNotableIncidents(
   ].join(",");
 
   const fields = encodeURIComponent(
-    "{incidents{properties{iconCategory,events{description}}}}",
+    "{incidents{properties{iconCategory,events{description}},geometry{type,coordinates}}}",
   );
   const url =
     `https://api.tomtom.com/traffic/services/5/incidentDetails` +
@@ -126,6 +184,7 @@ async function fetchNotableIncidents(
     const data = await res.json();
     const incidents = (data.incidents ?? []) as {
       properties?: { iconCategory?: number; events?: { description?: string }[] };
+      geometry?: IncidentGeometry;
     }[];
 
     const seen = new Set<string>();
@@ -142,7 +201,7 @@ async function fetchNotableIncidents(
       if (seen.has(key)) continue;
       seen.add(key);
 
-      notable.push({ description, icon });
+      notable.push({ description, icon, position: incidentPosition(inc.geometry) });
       if (notable.length >= 3) break;
     }
     return notable;
@@ -168,10 +227,13 @@ function makeMarkerIcon(emoji: string, background: string): HTMLElement {
   return el;
 }
 
+type RouteComparison = { liveMinutes: number; typicalMinutes: number };
+
 export function TrafficMapCard() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [incidents, setIncidents] = useState<NotableIncident[]>([]);
+  const [comparison, setComparison] = useState<RouteComparison | null>(null);
 
   const apiKey = process.env.NEXT_PUBLIC_TOMTOM_API_KEY;
   const homeCoords = process.env.NEXT_PUBLIC_HOME_COORDS;
@@ -196,6 +258,7 @@ export function TrafficMapCard() {
     let cancelled = false;
     let refreshTimer: ReturnType<typeof setInterval> | undefined;
     let map: TT.Map | undefined;
+    let incidentMarkers: TT.Marker[] = [];
 
     const origin = toLngLat(homeCoords);
     const destination = destinationCoords ? toLngLat(destinationCoords) : null;
@@ -239,21 +302,70 @@ export function TrafficMapCard() {
 
       if (!destination) {
         setIncidents([]);
+        setComparison(null);
         return;
       }
 
       const drawRoute = async () => {
         try {
-          const { coords, sections } = await fetchRouteWithTraffic(
-            apiKey,
-            origin,
-            destination,
-          );
+          const [{ coords, sections, travelTimeMinutes }, typical] = await Promise.all([
+            fetchRouteWithTraffic(apiKey, origin, destination),
+            // Best-effort — the live route is the important one, so a
+            // failure here just means no comparison this cycle rather
+            // than breaking the whole card.
+            fetchTypicalRoute(apiKey, origin, destination).catch(() => null),
+          ]);
           if (cancelled || !map || !coords.length) return;
 
           fetchNotableIncidents(apiKey, coords).then((result) => {
-            if (!cancelled) setIncidents(result);
+            if (cancelled || !map) return;
+            setIncidents(result);
+            incidentMarkers.forEach((m) => m.remove());
+            incidentMarkers = result
+              .filter((inc): inc is NotableIncident & { position: [number, number] } =>
+                Boolean(inc.position),
+              )
+              .map((inc) =>
+                new tt.Marker({ element: makeMarkerIcon(inc.icon, "#f59e0b") })
+                  .setLngLat(inc.position)
+                  .addTo(map!),
+              );
           });
+
+          setComparison(
+            typical ? { liveMinutes: travelTimeMinutes, typicalMinutes: typical.travelTimeMinutes } : null,
+          );
+
+          // Drawn first so it sits underneath the live route below —
+          // when the two routes match, the live line fully covers it
+          // and it's invisible; it only becomes visible where the
+          // live route (routed around live traffic/closures) actually
+          // diverges from the typical historical-speed route.
+          if (typical) {
+            const typicalGeojson: GeoJSON.Feature<GeoJSON.LineString> = {
+              type: "Feature",
+              properties: {},
+              geometry: { type: "LineString", coordinates: typical.coords },
+            };
+            const typicalSource = map.getSource("route-typical") as
+              | TT.GeoJSONSource
+              | undefined;
+            if (typicalSource) {
+              typicalSource.setData(typicalGeojson);
+            } else {
+              map.addSource("route-typical", { type: "geojson", data: typicalGeojson });
+              map.addLayer({
+                id: "route-typical-line",
+                type: "line",
+                source: "route-typical",
+                paint: {
+                  "line-color": TYPICAL_ROUTE_COLOR,
+                  "line-width": 4,
+                  "line-dasharray": [2, 2],
+                },
+              });
+            }
+          }
 
           const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
             type: "Feature",
@@ -313,7 +425,7 @@ export function TrafficMapCard() {
             });
           }
 
-          const bounds = coords.reduce(
+          const bounds = [...coords, ...(typical?.coords ?? [])].reduce(
             (b, c) => b.extend(c),
             new tt.LngLatBounds(coords[0], coords[0]),
           );
@@ -369,6 +481,15 @@ export function TrafficMapCard() {
             ))}
           </div>
         )}
+        {comparison &&
+          Math.abs(comparison.liveMinutes - comparison.typicalMinutes) >=
+            NOTABLE_TIME_DIFF_MINUTES && (
+            <p className="text-label shrink-0 pb-[0.5vh] text-accent-warn">
+              🛣️ {comparison.liveMinutes} min now vs. usually {comparison.typicalMinutes} min (
+              {comparison.liveMinutes > comparison.typicalMinutes ? "+" : ""}
+              {comparison.liveMinutes - comparison.typicalMinutes} min)
+            </p>
+          )}
         <div ref={containerRef} className="min-h-0 w-full flex-1" />
       </div>
     </Card>
