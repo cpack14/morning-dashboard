@@ -13,6 +13,27 @@ function numberField(formData: FormData, key: string, fallback: number): number 
   return Number.isFinite(value) ? value : fallback;
 }
 
+function formatHour12(hour: number): string {
+  const period = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:00 ${period}`;
+}
+
+// Hour-only cutoffs (no minute component in the data model) get a
+// plain <select> of all 24 hours labeled in 12-hour time, rather than
+// a <input type="time"> that would imply a minute value nothing uses.
+function HourSelect({ name, defaultValue }: { name: string; defaultValue: number }) {
+  return (
+    <select name={name} defaultValue={defaultValue} className={inputClass}>
+      {Array.from({ length: 24 }, (_, hour) => (
+        <option key={hour} value={hour}>
+          {formatHour12(hour)}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function Field({
   label,
   explainer,
@@ -216,47 +237,32 @@ export default async function SettingsPage() {
           </Field>
 
           <Field
-            label="Early-meeting cutoff hour"
-            explainer="Meetings before this hour (24h clock) are assumed to be attended from home — no commute is planned around them."
+            label="Early-meeting cutoff time"
+            explainer="Meetings before this time are assumed to be attended from home — no commute is planned around them."
           >
-            <input
-              type="number"
+            <HourSelect
               name="earlyMeetingCutoffHour"
               defaultValue={settings.earlyMeetingCutoffHour}
-              min={0}
-              max={23}
-              className={inputClass}
-              required
             />
           </Field>
 
           <Field
-            label="Afternoon cutoff hour"
-            explainer="On weekdays, after this hour (24h clock) the Current Commute card switches from showing your commute to work to your next personal event instead."
+            label="Afternoon cutoff time"
+            explainer="On weekdays, after this time the Current Commute card switches from showing your commute to work to your next personal event instead."
           >
-            <input
-              type="number"
+            <HourSelect
               name="afternoonCutoffHour"
               defaultValue={settings.afternoonCutoffHour}
-              min={0}
-              max={23}
-              className={inputClass}
-              required
             />
           </Field>
 
           <Field
-            label="Sunday noon cutoff hour"
-            explainer="On Sundays, switches the commute destination from church (before this hour) to the Bountiful address (after)."
+            label="Sunday cutoff time"
+            explainer="On Sundays, switches the commute destination from church (before this time) to the Bountiful address (after)."
           >
-            <input
-              type="number"
+            <HourSelect
               name="sundayNoonCutoffHour"
               defaultValue={settings.sundayNoonCutoffHour}
-              min={0}
-              max={23}
-              className={inputClass}
-              required
             />
           </Field>
         </section>
