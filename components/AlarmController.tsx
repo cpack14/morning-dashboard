@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const RAMP_DURATION_MS = 30_000;
+const DEFAULT_RAMP_SECONDS = 30;
+const DEFAULT_SNOOZE_MINUTES = 10;
 const MAX_PLAY_DURATION_MS = 3 * 60 * 1000;
 const MIN_VOLUME = 0.03;
 const MAX_VOLUME = 1.0;
 const POLL_MS = 60_000;
 const MAX_STALE_MS = 15 * 60 * 1000;
-const SNOOZE_MS = 10 * 60 * 1000;
 const FIRED_KEY = "morningDashboardAlarmFiredDate";
 const SOUND_HISTORY_KEY = "morningDashboardAlarmSoundHistory";
 
@@ -124,7 +124,30 @@ export function AlarmController() {
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const snoozeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chosenSoundRef = useRef<string | null>(null);
+  // Read via ref (not state) so the timers/effects below that use these
+  // always see the latest fetched value without needing to be in a
+  // dependency array — settings rarely change and are fetched once.
+  const settingsRef = useRef({
+    alarmRampSeconds: DEFAULT_RAMP_SECONDS,
+    snoozeMinutes: DEFAULT_SNOOZE_MINUTES,
+  });
   const [active, setActive] = useState(false);
+  const [snoozeMinutesDisplay, setSnoozeMinutesDisplay] = useState(DEFAULT_SNOOZE_MINUTES);
+
+  useEffect(() => {
+    fetch("/api/settings", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => {
+        settingsRef.current = {
+          alarmRampSeconds: data.alarmRampSeconds ?? DEFAULT_RAMP_SECONDS,
+          snoozeMinutes: data.snoozeMinutes ?? DEFAULT_SNOOZE_MINUTES,
+        };
+        setSnoozeMinutesDisplay(settingsRef.current.snoozeMinutes);
+      })
+      .catch(() => {
+        // Settings unreachable — the defaults above just keep applying.
+      });
+  }, []);
 
   function startAlarm() {
     if (!chosenSoundRef.current) {
@@ -193,8 +216,9 @@ export function AlarmController() {
     reportAlarmState("started");
 
     const start = Date.now();
+    const rampDurationMs = settingsRef.current.alarmRampSeconds * 1000;
     rampIntervalRef.current = setInterval(() => {
-      const t = Math.min(1, (Date.now() - start) / RAMP_DURATION_MS);
+      const t = Math.min(1, (Date.now() - start) / rampDurationMs);
       audio.volume = MIN_VOLUME + (MAX_VOLUME - MIN_VOLUME) * t;
       if (t >= 1 && rampIntervalRef.current) {
         clearInterval(rampIntervalRef.current);
@@ -251,7 +275,8 @@ export function AlarmController() {
     reportAlarmState("acknowledged");
     pausePlayback();
     setActive(false);
-    snoozeTimerRef.current = setTimeout(() => setActive(true), SNOOZE_MS);
+    const snoozeMs = settingsRef.current.snoozeMinutes * 60 * 1000;
+    snoozeTimerRef.current = setTimeout(() => setActive(true), snoozeMs);
   }
 
   return (
@@ -273,7 +298,7 @@ export function AlarmController() {
                 onClick={snoozeAlarm}
                 className="text-body rounded-xl border border-surface-border px-[3vh] py-[1.5vh] font-medium text-muted focus:outline-none focus:ring-4 focus:ring-white"
               >
-                Snooze 10 min
+                Snooze {snoozeMinutesDisplay} min
               </button>
             </div>
           </div>

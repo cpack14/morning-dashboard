@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { fetchGoogleCalendarEvents, type RawCalendarEvent } from "@/lib/googleCalendar";
 import { dayKeyInTimezone, isWeekend } from "@/lib/timezone";
+import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
-const WORK_DOMAIN = "droplet.io";
 const OOO_DAYS_AHEAD = 365;
 
 type DaySummaryResponse =
@@ -53,7 +53,11 @@ async function fetchHolidayName(now: Date): Promise<string | null> {
   }
 }
 
-function classifyWorkMeetings(raw: RawCalendarEvent[], todayKey: string) {
+function classifyWorkMeetings(
+  raw: RawCalendarEvent[],
+  todayKey: string,
+  workEmailDomain: string,
+) {
   let client = 0;
   let internal = 0;
 
@@ -69,7 +73,7 @@ function classifyWorkMeetings(raw: RawCalendarEvent[], todayKey: string) {
     if (others.length === 0) continue; // solo block, not a meeting with anyone
 
     const hasExternal = others.some(
-      (a) => !a.email?.toLowerCase().endsWith(`@${WORK_DOMAIN}`),
+      (a) => !a.email?.toLowerCase().endsWith(`@${workEmailDomain.toLowerCase()}`),
     );
     if (hasExternal) client++;
     else internal++;
@@ -219,6 +223,7 @@ export async function GET() {
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const workToken = process.env.GOOGLE_WORK_REFRESH_TOKEN;
   const personalToken = process.env.GOOGLE_PERSONAL_REFRESH_TOKEN;
+  const settings = await getSettings();
 
   if (!clientId || !clientSecret) {
     return NextResponse.json({
@@ -306,6 +311,7 @@ export async function GET() {
       ? classifyWorkMeetings(
           await fetchGoogleCalendarEvents(workToken, dayWindowMin, dayWindowMax, 50),
           todayKey,
+          settings.workEmailDomain,
         )
       : { client: 0, internal: 0 };
     const body: DaySummaryResponse = {

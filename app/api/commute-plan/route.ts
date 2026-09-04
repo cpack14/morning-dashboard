@@ -5,12 +5,9 @@ import { computeLeaveBy } from "@/lib/commuteLeaveBy";
 import { getCurrentEta } from "@/lib/currentEta";
 import { geocodeAddress } from "@/lib/tomtomGeocode";
 import type { TrafficCondition } from "@/lib/trafficCondition";
+import { getSettings, type DashboardSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
-
-const EARLY_CUTOFF_HOUR = 9;
-const AFTERNOON_CUTOFF_HOUR = 13;
-const SUNDAY_NOON_HOUR = 12;
 
 type Hero = {
   durationMinutes: number;
@@ -51,7 +48,7 @@ function unavailable(reason: string) {
 // meeting today, a "leave by" suggestion is added on top — but its
 // absence (no meeting, calendar unavailable, etc.) never blanks out
 // the hero number itself. ----
-async function planWorkMeeting(now: Date) {
+async function planWorkMeeting(now: Date, settings: DashboardSettings) {
   const tomtomKey = process.env.TOMTOM_API_KEY;
   const origin = process.env.HOME_COORDS;
   const destination = process.env.WORK_COORDS;
@@ -74,7 +71,7 @@ async function planWorkMeeting(now: Date) {
     return unavailable((error as Error).message);
   }
 
-  const leaveBy = await tryComputeWorkLeaveBy(now, destination);
+  const leaveBy = await tryComputeWorkLeaveBy(now, destination, settings);
 
   return NextResponse.json<CommutePlanResponse>({
     mode: "work",
@@ -91,6 +88,7 @@ async function planWorkMeeting(now: Date) {
 async function tryComputeWorkLeaveBy(
   now: Date,
   destination: string,
+  settings: DashboardSettings,
 ): Promise<LeaveBy | undefined> {
   const refreshToken = process.env.GOOGLE_WORK_REFRESH_TOKEN;
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -119,7 +117,8 @@ async function tryComputeWorkLeaveBy(
     // assumed to be attended remotely rather than commuted for.
     const anchor = todaysMeetings.find(
       (e) =>
-        hourInTimezone(e.start) >= EARLY_CUTOFF_HOUR && e.start.getTime() > now.getTime(),
+        hourInTimezone(e.start) >= settings.earlyMeetingCutoffHour &&
+        e.start.getTime() > now.getTime(),
     );
     if (!anchor) return undefined;
 
@@ -129,7 +128,11 @@ async function tryComputeWorkLeaveBy(
       .filter((e) => e.id !== anchor.id && e.end.getTime() <= anchor.start.getTime())
       .sort((a, b) => b.end.getTime() - a.end.getTime())[0];
 
-    const leaveByResult = await computeLeaveBy(anchor.start, destination);
+    const leaveByResult = await computeLeaveBy(
+      anchor.start,
+      destination,
+      settings.workArrivalBufferMinutes,
+    );
     const clamped = Boolean(
       previous && previous.end.getTime() > leaveByResult.leaveBy.getTime(),
     );
@@ -153,7 +156,7 @@ async function tryComputeWorkLeaveBy(
 
 // ---- Weekday after 1pm, and Saturday: next personal-calendar event
 // today that has a location. ----
-async function planPersonalEvent(now: Date) {
+async function planPersonalEvent(now: Date, settings: DashboardSettings) {
   const refreshToken = process.env.GOOGLE_PERSONAL_REFRESH_TOKEN;
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -201,7 +204,11 @@ async function planPersonalEvent(now: Date) {
 
   let leaveByResult;
   try {
-    leaveByResult = await computeLeaveBy(anchor.start, destination);
+    leaveByResult = await computeLeaveBy(
+      anchor.start,
+      destination,
+      settings.personalArrivalBufferMinutes,
+    );
   } catch (error) {
     return unavailable((error as Error).message);
   }
@@ -263,18 +270,19 @@ async function planFixedDestination(mode: "church" | "bountiful") {
 
 export async function GET() {
   const now = new Date();
+  const settings = await getSettings();
 
   if (isSunday(now)) {
-    return hourInTimezone(now) < SUNDAY_NOON_HOUR
+    return hourInTimezone(now) < settings.sundayNoonCutoffHour
       ? planFixedDestination("church")
       : planFixedDestination("bountiful");
   }
 
   if (isWeekend(now)) {
-    return planPersonalEvent(now);
+    return planPersonalEvent(now, settings);
   }
 
-  return hourInTimezone(now) < AFTERNOON_CUTOFF_HOUR
-    ? planWorkMeeting(now)
-    : planPersonalEvent(now);
+  return hourInTimezone(now) < settings.afternoonCutoffHour
+    ? planWorkMeeting(now, settings)
+    : planPersonalEvent(now, settings);
 }

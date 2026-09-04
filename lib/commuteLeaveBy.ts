@@ -1,7 +1,5 @@
 import { classifyTraffic, type TrafficCondition } from "@/lib/trafficCondition";
 
-const ARRIVAL_BUFFER_MINUTES = 10;
-
 export type LeaveByResult = {
   leaveBy: Date;
   travelTimeMinutes: number;
@@ -10,11 +8,12 @@ export type LeaveByResult = {
 };
 
 // Asks TomTom what time to leave home to arrive at the given
-// destination by 10 minutes before the target start time, using
-// predicted (not live) traffic for that future time of day.
+// destination `arrivalBufferMinutes` before the target start time,
+// using predicted (not live) traffic for that future time of day.
 export async function computeLeaveBy(
   targetStart: Date,
   destinationCoords: string,
+  arrivalBufferMinutes: number,
 ): Promise<LeaveByResult> {
   const tomtomKey = process.env.TOMTOM_API_KEY;
   const origin = process.env.HOME_COORDS;
@@ -23,7 +22,7 @@ export async function computeLeaveBy(
   }
 
   const arriveAt = new Date(
-    targetStart.getTime() - ARRIVAL_BUFFER_MINUTES * 60 * 1000,
+    targetStart.getTime() - arrivalBufferMinutes * 60 * 1000,
   );
   const url = `https://api.tomtom.com/routing/1/calculateRoute/${origin}:${destinationCoords}/json?key=${tomtomKey}&arriveAt=${arriveAt.toISOString()}&computeTravelTimeFor=all&sectionType=traffic`;
 

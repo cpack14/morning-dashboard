@@ -4,12 +4,9 @@ import { dayKeyInTimezone, hourInTimezone, isWeekend } from "@/lib/timezone";
 import { fetchGoogleCalendarEvents } from "@/lib/googleCalendar";
 import { computeLeaveBy } from "@/lib/commuteLeaveBy";
 import { getSecurityStatus } from "@/lib/securityStatus";
+import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
-
-const EARLY_CUTOFF_HOUR = 9;
-const GET_READY_MINUTES = 40;
-const DEFAULT_WEEKDAY_WAKE_HOUR = 8;
 
 type CalendarKey = "work" | "personal";
 type TimedMeeting = { start: Date; calendar: CalendarKey };
@@ -62,6 +59,7 @@ function result(wakeTime: Date | null, reason?: string, meetingStart?: Date) {
 
 export async function GET() {
   const now = new Date();
+  const settings = await getSettings();
 
   if ((await getSecurityStatus()) === "away") {
     return result(null, "away");
@@ -111,18 +109,18 @@ export async function GET() {
   if (!firstMeeting) {
     const wakeTime = zonedTimeToUtc(
       todayKey,
-      DEFAULT_WEEKDAY_WAKE_HOUR,
-      0,
+      settings.defaultWakeHour,
+      settings.defaultWakeMinute,
       HOME_TIMEZONE,
     );
     return result(wakeTime, "no meetings today, default weekday wake time");
   }
 
-  const isEarly = hourInTimezone(firstMeeting.start) < EARLY_CUTOFF_HOUR;
+  const isEarly = hourInTimezone(firstMeeting.start) < settings.earlyMeetingCutoffHour;
 
   if (isEarly || firstMeeting.calendar !== "work") {
     const wakeTime = new Date(
-      firstMeeting.start.getTime() - GET_READY_MINUTES * 60 * 1000,
+      firstMeeting.start.getTime() - settings.getReadyMinutes * 60 * 1000,
     );
     return result(wakeTime, undefined, firstMeeting.start);
   }
@@ -131,8 +129,11 @@ export async function GET() {
     const { leaveBy } = await computeLeaveBy(
       firstMeeting.start,
       process.env.WORK_COORDS ?? "",
+      settings.workArrivalBufferMinutes,
     );
-    const wakeTime = new Date(leaveBy.getTime() - GET_READY_MINUTES * 60 * 1000);
+    const wakeTime = new Date(
+      leaveBy.getTime() - settings.getReadyMinutes * 60 * 1000,
+    );
     return result(wakeTime, undefined, firstMeeting.start);
   } catch (error) {
     return result(null, (error as Error).message);
