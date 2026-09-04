@@ -16,6 +16,7 @@ type DaySummaryResponse =
       personalEventCount?: number;
       outOfOffice: { title: string; daysUntil: number } | null;
       birthdays: string[];
+      nextTravel: { title: string; daysUntil: number } | null;
     };
 
 type NagerHoliday = { date: string; name: string; global: boolean };
@@ -157,6 +158,62 @@ function findNextOutOfOffice(
   return { title: best.title, daysUntil: daysBetweenKeys(todayKey, best.startKey) };
 }
 
+// Three independent signals, any one of which counts as "looks like a
+// flight": the word itself, an airline-code-style pattern (e.g. "UA
+// 1234"), or Google's own flag for events Gmail auto-created from a
+// confirmation email (which also covers hotels/rentals/tickets, so it
+// isn't perfectly precise on its own — combined with the other two
+// signals as a permissive OR, per explicit choice to include all three
+// even knowing that trade-off).
+const FLIGHT_KEYWORD = /\bflight\b/i;
+const AIRLINE_CODE_PATTERN = /\b[A-Z]{2}\s?\d{2,4}\b/;
+const ONSITE_KEYWORD = /\bonsite\b/i;
+
+function looksLikeFlight(item: RawCalendarEvent): boolean {
+  const title = item.summary ?? "";
+  return (
+    FLIGHT_KEYWORD.test(title) ||
+    AIRLINE_CODE_PATTERN.test(title) ||
+    item.eventType === "fromGmail"
+  );
+}
+
+function isMultiDayOnsite(item: RawCalendarEvent): boolean {
+  if (!ONSITE_KEYWORD.test(item.summary ?? "")) return false;
+
+  const startRaw = item.start?.dateTime ?? item.start?.date;
+  const endRaw = item.end?.dateTime ?? item.end?.date;
+  if (!startRaw || !endRaw) return false;
+
+  return dayKeyInTimezone(new Date(startRaw)) !== dayKeyInTimezone(new Date(endRaw));
+}
+
+function findNextTravelEvent(
+  workRaw: RawCalendarEvent[],
+  personalRaw: RawCalendarEvent[],
+  todayKey: string,
+): { title: string; daysUntil: number } | null {
+  const candidates: RawCalendarEvent[] = [
+    ...[...workRaw, ...personalRaw].filter(looksLikeFlight),
+    // Onsite is work-only, per the rule as specified.
+    ...workRaw.filter(isMultiDayOnsite),
+  ];
+
+  let best: { title: string; startKey: string } | null = null;
+  for (const item of candidates) {
+    const startRaw = item.start?.dateTime ?? item.start?.date;
+    if (!startRaw) continue;
+    const startKey = dayKeyInTimezone(new Date(startRaw));
+    if (startKey < todayKey) continue;
+    if (!best || startKey < best.startKey) {
+      best = { title: item.summary ?? "Flight", startKey };
+    }
+  }
+
+  if (!best) return null;
+  return { title: best.title, daysUntil: daysBetweenKeys(todayKey, best.startKey) };
+}
+
 export async function GET() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -194,6 +251,26 @@ export async function GET() {
     );
     const outOfOffice = findNextOutOfOffice(oooLists, todayKey);
 
+    // Separate from the OOO fetch since it needs actual (non-outOfOffice)
+    // events to scan for flight/onsite signals — "default" covers
+    // normal events (including a manually-typed "Onsite" or "Flight to
+    // X"), "fromGmail" covers Gmail's own auto-detected confirmations.
+    const [workTravelRaw, personalTravelRaw] = await Promise.all([
+      workToken
+        ? fetchGoogleCalendarEvents(workToken, now.toISOString(), oooWindowMax, 50, [
+            "default",
+            "fromGmail",
+          ])
+        : Promise.resolve([]),
+      personalToken
+        ? fetchGoogleCalendarEvents(personalToken, now.toISOString(), oooWindowMax, 50, [
+            "default",
+            "fromGmail",
+          ])
+        : Promise.resolve([]),
+    ]);
+    const nextTravel = findNextTravelEvent(workTravelRaw, personalTravelRaw, todayKey);
+
     // Fetched unconditionally (not just on weekends) since birthdays
     // are checked every day, regardless of day type.
     const personalRawToday = personalToken
@@ -208,6 +285,7 @@ export async function GET() {
         holidayName,
         outOfOffice,
         birthdays,
+        nextTravel,
       };
       return NextResponse.json(body);
     }
@@ -219,6 +297,7 @@ export async function GET() {
         personalEventCount,
         outOfOffice,
         birthdays,
+        nextTravel,
       };
       return NextResponse.json(body);
     }
@@ -229,7 +308,13 @@ export async function GET() {
           todayKey,
         )
       : { client: 0, internal: 0 };
-    const body: DaySummaryResponse = { dayType: "weekday", meetings, outOfOffice, birthdays };
+    const body: DaySummaryResponse = {
+      dayType: "weekday",
+      meetings,
+      outOfOffice,
+      birthdays,
+      nextTravel,
+    };
     return NextResponse.json(body);
   } catch (error) {
     const body: DaySummaryResponse = {

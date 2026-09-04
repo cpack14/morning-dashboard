@@ -14,6 +14,7 @@ type DaySummaryResponse =
       personalEventCount?: number;
       outOfOffice: { title: string; daysUntil: number } | null;
       birthdays: string[];
+      nextTravel: { title: string; daysUntil: number } | null;
     };
 
 type SecurityStatusResponse = { state: "home" | "away" };
@@ -58,13 +59,19 @@ function describeDay(data: Extract<DaySummaryResponse, { dayType: string }>): st
   const { client = 0, internal = 0 } = data.meetings ?? {};
   const total = client + internal;
   if (total === 0) return `${greeting} ${NAME}, no meetings today`;
-  return `${greeting} ${NAME}, you have ${client} client and ${internal} internal meeting${total === 1 ? "" : "s"} today`;
+  if (client > 0 && internal > 0) {
+    return `${greeting} ${NAME}, you have ${client} client and ${internal} internal meeting${total === 1 ? "" : "s"} today`;
+  }
+  if (client > 0) {
+    return `${greeting} ${NAME}, you have ${client} client meeting${client === 1 ? "" : "s"} today`;
+  }
+  return `${greeting} ${NAME}, you have ${internal} internal meeting${internal === 1 ? "" : "s"} today`;
 }
 
-function describeOutOfOffice(ooo: { title: string; daysUntil: number }): string {
-  if (ooo.daysUntil === 0) return `${ooo.title} is today`;
-  if (ooo.daysUntil === 1) return `1 day until ${ooo.title}`;
-  return `${ooo.daysUntil} days until ${ooo.title}`;
+function describeCountdown(item: { title: string; daysUntil: number }): string {
+  if (item.daysUntil === 0) return `${item.title} is today`;
+  if (item.daysUntil === 1) return `1 day until ${item.title}`;
+  return `${item.daysUntil} days until ${item.title}`;
 }
 
 function joinNames(names: string[]): string {
@@ -99,7 +106,12 @@ export function HeaderStatus() {
       )}
       {data.outOfOffice && (
         <p className="text-label mt-[0.3vh] text-muted">
-          🗓️ {describeOutOfOffice(data.outOfOffice)}
+          🗓️ {describeCountdown(data.outOfOffice)}
+        </p>
+      )}
+      {data.nextTravel && (
+        <p className="text-label mt-[0.3vh] text-muted">
+          ✈️ {describeCountdown(data.nextTravel)}
         </p>
       )}
     </div>

@@ -18,12 +18,45 @@ type UpcomingResponse = {
   error?: string;
 };
 
-function formatDateLabel(date: Date) {
-  return date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "numeric",
-    day: "numeric",
-  });
+// All-day dates come as bare "YYYY-MM-DD" strings — parsing those with
+// `new Date(string)` reads them as UTC midnight, which shifts a day
+// off in any negative UTC-offset timezone once toLocaleDateString
+// renders it in local time. Parsing the components directly into a
+// local Date sidesteps that entirely.
+function parseEventDate(iso: string, allDay: boolean): Date {
+  if (allDay) {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return new Date(iso);
+}
+
+// Google's all-day `end` is exclusive (one day past the actual last
+// day), so the displayed last day needs to step back by one.
+function lastInclusiveDay(event: UpcomingEvent): Date {
+  const end = parseEventDate(event.end, event.allDay);
+  if (event.allDay) {
+    return new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1);
+  }
+  return end;
+}
+
+function formatShortDate(date: Date) {
+  return date.toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
+}
+
+function formatDateLabel(event: UpcomingEvent) {
+  const start = parseEventDate(event.start, event.allDay);
+  const end = lastInclusiveDay(event);
+
+  if (start.toDateString() === end.toDateString()) {
+    return start.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "numeric",
+      day: "numeric",
+    });
+  }
+  return `${formatShortDate(start)}–${formatShortDate(end)}`;
 }
 
 function formatTimeLabel(event: UpcomingEvent) {
@@ -37,8 +70,8 @@ function formatTimeLabel(event: UpcomingEvent) {
 function UpcomingRow({ event }: { event: UpcomingEvent }) {
   return (
     <li className="flex items-baseline gap-[0.5em] overflow-hidden">
-      <span className="w-[5.5em] shrink-0 whitespace-nowrap text-muted tabular-nums">
-        {formatDateLabel(new Date(event.start))}
+      <span className="w-[6.5em] shrink-0 whitespace-nowrap text-muted tabular-nums">
+        {formatDateLabel(event)}
       </span>
       <span className="w-[4.5em] shrink-0 text-muted tabular-nums">
         {formatTimeLabel(event)}
