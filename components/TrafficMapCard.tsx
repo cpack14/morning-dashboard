@@ -12,14 +12,17 @@ const ROUTE_COLOR = "#5b9dff";
 const MODERATE_DELAY_COLOR = "#f59e0b";
 const SEVERE_DELAY_COLOR = "#ef4444";
 const TYPICAL_ROUTE_COLOR = "#8b96ab";
-const TYPICAL_ROUTE_OPACITY = 0.4;
-const TYPICAL_SEVERITY_OPACITY = 0.6;
+const TYPICAL_ROUTE_OPACITY = 0.65;
+const TYPICAL_SEVERITY_OPACITY = 0.8;
 // Below this, a live-vs-typical gap is just normal noise, not worth
 // calling out.
 const NOTABLE_TIME_DIFF_MINUTES = 2;
-// TomTom's calculateRoute caps a single request at 150 waypoints —
-// leave room for origin + destination.
-const MAX_ROUTE_WAYPOINTS = 148;
+// TomTom's calculateRoute technically allows up to 150 waypoints, but
+// forcing a route through that many densely-packed points causes real
+// backtracking between them (verified: 148 waypoints inflated a known
+// 15.3mi route to 19.5mi) rather than just following the road — far
+// fewer, well-spaced waypoints reconstruct the same path exactly.
+const MAX_ROUTE_WAYPOINTS = 20;
 
 type CommutePlanResponse =
   | { mode: "work" | "personal" | "church" | "bountiful"; destinationCoords: string }
@@ -52,13 +55,35 @@ type TomTomRouteSection = {
   magnitudeOfDelay?: number;
 };
 
-type TomTomRoutingResponse = {
-  routes: {
-    legs: { points: { latitude: number; longitude: number }[] }[];
-    sections?: TomTomRouteSection[];
-    summary?: { travelTimeInSeconds: number };
-  }[];
+type TomTomRoute = {
+  legs: { points: { latitude: number; longitude: number }[] }[];
+  sections?: TomTomRouteSection[];
+  summary?: { travelTimeInSeconds: number };
+  guidance?: { instructions?: { street?: string }[] };
 };
+
+type TomTomRoutingResponse = {
+  routes: TomTomRoute[];
+};
+
+// A hand-picked, distinctive subset of streets from the actual known
+// commute (not the full turn-by-turn) — TomTom's historical-speed
+// route doesn't always pick this path as its #1 choice, but it does
+// consistently offer it as one of a few alternatives. Matching against
+// just these avoids over-fitting to TomTom's exact street-name
+// spelling/casing on every one of the real turns.
+const USUAL_ROUTE_SIGNATURE = (process.env.NEXT_PUBLIC_USUAL_ROUTE_STREETS ?? "")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
+function routeMatchesSignature(route: TomTomRoute, signature: string[]): boolean {
+  if (signature.length === 0) return false;
+  const streets = (route.guidance?.instructions ?? [])
+    .map((instr) => instr.street?.toLowerCase() ?? "")
+    .join(" | ");
+  return signature.every((s) => streets.includes(s));
+}
 
 function routeCoords(route: TomTomRoutingResponse["routes"][number]): [number, number][] {
   return route.legs.flatMap((leg) =>
@@ -104,21 +129,32 @@ async function fetchRouteWithTraffic(
 // deliberately won't route around a live-only closure/jam the way the
 // traffic-aware call above does. Drawn underneath the live route, so
 // it only becomes visible when the two actually diverge.
+//
+// When NEXT_PUBLIC_USUAL_ROUTE_STREETS is set, TomTom's top historical
+// pick isn't necessarily the one actually driven — it's asked for a
+// few alternatives instead, and whichever one's turn-by-turn passes
+// through all the listed streets is used in preference to whatever
+// TomTom ranked first.
 async function fetchTypicalRoute(
   apiKey: string,
   origin: [number, number],
   destination: [number, number],
 ): Promise<{ coords: [number, number][]; travelTimeMinutes: number }> {
+  const wantsSignatureMatch = USUAL_ROUTE_SIGNATURE.length > 0;
   const url =
     `https://api.tomtom.com/routing/1/calculateRoute/` +
     `${origin[1]},${origin[0]}:${destination[1]},${destination[0]}/json` +
-    `?key=${apiKey}&routeType=fastest&traffic=false`;
+    `?key=${apiKey}&routeType=fastest&traffic=false` +
+    (wantsSignatureMatch ? "&maxAlternatives=3&instructionsType=text" : "");
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`TomTom routing request failed (${res.status})`);
   const data: TomTomRoutingResponse = await res.json();
 
-  const route = data.routes?.[0];
+  const routes = data.routes ?? [];
+  const route = wantsSignatureMatch
+    ? (routes.find((r) => routeMatchesSignature(r, USUAL_ROUTE_SIGNATURE)) ?? routes[0])
+    : routes[0];
   if (!route) throw new Error("No route returned");
 
   return {
@@ -571,7 +607,8 @@ export function TrafficMapCard() {
           Math.abs(comparison.liveMinutes - comparison.typicalMinutes) >=
             NOTABLE_TIME_DIFF_MINUTES && (
             <p className="text-label shrink-0 pb-[0.5vh] text-accent-warn">
-              🛣️ {comparison.liveMinutes} min now vs. usually {comparison.typicalMinutes} min (
+              🛣️ Current route: {comparison.liveMinutes} min · Usual route:{" "}
+              {comparison.typicalMinutes} min (
               {comparison.liveMinutes > comparison.typicalMinutes ? "+" : ""}
               {comparison.liveMinutes - comparison.typicalMinutes} min)
             </p>
