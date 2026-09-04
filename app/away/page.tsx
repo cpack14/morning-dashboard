@@ -1,5 +1,6 @@
 import { getSecurityStatus, setSecurityStatus } from "@/lib/securityStatus";
 import { getSettings, setSettings, type DashboardSettings } from "@/lib/settings";
+import { SaveSettingsButton } from "@/components/SaveSettingsButton";
 import { revalidatePath } from "next/cache";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +73,9 @@ export default async function SettingsPage() {
     const [wakeHour, wakeMinute] = String(formData.get("defaultWakeTime") ?? "")
       .split(":")
       .map(Number);
+    const [fallbackHour, fallbackMinute] = String(formData.get("fallbackWakeTime") ?? "")
+      .split(":")
+      .map(Number);
 
     const updated: DashboardSettings = {
       defaultWakeHour: Number.isFinite(wakeHour) ? wakeHour : current.defaultWakeHour,
@@ -112,6 +116,25 @@ export default async function SettingsPage() {
         current.alarmRampSeconds,
       ),
       snoozeMinutes: numberField(formData, "snoozeMinutes", current.snoozeMinutes),
+      tvVolumeTarget: numberField(formData, "tvVolumeTarget", current.tvVolumeTarget),
+      fallbackWakeHour: Number.isFinite(fallbackHour)
+        ? fallbackHour
+        : current.fallbackWakeHour,
+      fallbackWakeMinute: Number.isFinite(fallbackMinute)
+        ? fallbackMinute
+        : current.fallbackWakeMinute,
+      alarmGiveUpHour: numberField(formData, "alarmGiveUpHour", current.alarmGiveUpHour),
+      triggerLeadMinutes: numberField(
+        formData,
+        "triggerLeadMinutes",
+        current.triggerLeadMinutes,
+      ),
+      watchMinutes: numberField(formData, "watchMinutes", current.watchMinutes),
+      postTimeoutSleepMinutes: numberField(
+        formData,
+        "postTimeoutSleepMinutes",
+        current.postTimeoutSleepMinutes,
+      ),
     };
 
     await setSettings(updated);
@@ -268,6 +291,90 @@ export default async function SettingsPage() {
         </section>
 
         <section className="flex flex-col gap-4">
+          <h2 className="text-lg font-semibold">TV wake behavior</h2>
+          <p className="text-xs text-muted">
+            These control Frank, the always-on machine that actually turns the
+            TV on and off — separate from the alarm logic above.
+          </p>
+
+          <Field
+            label="TV volume target"
+            explainer="The exact volume the TV is forced to every time it wakes, regardless of whatever it was left at."
+          >
+            <input
+              type="number"
+              name="tvVolumeTarget"
+              defaultValue={settings.tvVolumeTarget}
+              min={0}
+              className={inputClass}
+              required
+            />
+          </Field>
+
+          <Field
+            label="Weekend / no-meeting wake time"
+            explainer="On weekends, or any day with no computed alarm time, the screen turns on silently (no alarm sound) at this time — independent of the default wake time above. Away mode still blocks this entirely."
+          >
+            <input
+              type="time"
+              name="fallbackWakeTime"
+              defaultValue={toHourMinute(settings.fallbackWakeHour, settings.fallbackWakeMinute)}
+              className={inputClass}
+              required
+            />
+          </Field>
+
+          <Field
+            label="Give-up time"
+            explainer="Frank stops trying to trigger the alarm for the day after this time, even if something computed a later wake time."
+          >
+            <HourSelect name="alarmGiveUpHour" defaultValue={settings.alarmGiveUpHour} />
+          </Field>
+
+          <Field
+            label="Trigger lead time (minutes)"
+            explainer="How long before the computed wake time Frank starts waking the TV and loading the dashboard, so the alarm sound itself starts on time rather than late."
+          >
+            <input
+              type="number"
+              name="triggerLeadMinutes"
+              defaultValue={settings.triggerLeadMinutes}
+              min={0}
+              className={inputClass}
+              required
+            />
+          </Field>
+
+          <Field
+            label="Watch duration (minutes)"
+            explainer="After triggering a wake, how long Frank keeps checking whether the alarm went completely unacknowledged (no Stop or Snooze at all)."
+          >
+            <input
+              type="number"
+              name="watchMinutes"
+              defaultValue={settings.watchMinutes}
+              min={1}
+              className={inputClass}
+              required
+            />
+          </Field>
+
+          <Field
+            label="Sleep delay after timeout (minutes)"
+            explainer="If the alarm goes completely unacknowledged, how long Frank waits before putting the screen back to sleep."
+          >
+            <input
+              type="number"
+              name="postTimeoutSleepMinutes"
+              defaultValue={settings.postTimeoutSleepMinutes}
+              min={0}
+              className={inputClass}
+              required
+            />
+          </Field>
+        </section>
+
+        <section className="flex flex-col gap-4">
           <h2 className="text-lg font-semibold">Meeting classification</h2>
 
           <Field
@@ -284,12 +391,7 @@ export default async function SettingsPage() {
           </Field>
         </section>
 
-        <button
-          type="submit"
-          className="rounded-2xl bg-accent-work px-6 py-3 text-lg font-medium text-foreground"
-        >
-          Save settings
-        </button>
+        <SaveSettingsButton />
       </form>
     </main>
   );
