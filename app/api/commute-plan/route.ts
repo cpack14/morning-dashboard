@@ -193,49 +193,94 @@ async function planPersonalEvent(now: Date, settings: DashboardSettings) {
     .sort((a, b) => a.start.getTime() - b.start.getTime());
 
   const anchor = todaysEvents[0];
-  if (!anchor) {
+  if (anchor) {
+    const destination = await geocodeAddress(anchor.location);
+    if (!destination) {
+      return unavailable(`couldn't find a location for "${anchor.title}"`);
+    }
+
+    let leaveByResult;
+    try {
+      leaveByResult = await computeLeaveBy(
+        anchor.start,
+        destination,
+        settings.personalArrivalBufferMinutes,
+      );
+    } catch (error) {
+      return unavailable((error as Error).message);
+    }
+
+    const tight =
+      leaveByResult.leaveBy.getTime() + leaveByResult.travelTimeMinutes * 60 * 1000 >
+      anchor.start.getTime();
+
+    return NextResponse.json<CommutePlanResponse>({
+      mode: "personal",
+      destinationLabel: anchor.title,
+      destinationCoords: destination,
+      hero: {
+        durationMinutes: leaveByResult.travelTimeMinutes,
+        distanceMiles: leaveByResult.distanceMiles,
+        trafficCondition: leaveByResult.trafficCondition,
+        live: false,
+      },
+      leaveBy: {
+        time: leaveByResult.leaveBy.toISOString(),
+        travelTimeMinutes: leaveByResult.travelTimeMinutes,
+        eventTitle: anchor.title,
+        eventStart: anchor.start.toISOString(),
+        trafficCondition: leaveByResult.trafficCondition,
+        tight,
+      },
+    });
+  }
+
+  // No specific-time event today — fall back to an all-day event with
+  // a location (e.g. a multi-day trip or reunion). There's no target
+  // time to plan a "leave by" around, so this just shows the live ETA,
+  // the same way the work/Sunday destinations do.
+  const allDayEvents = raw
+    .filter(
+      (item) =>
+        item.start?.date && !item.start?.dateTime && item.end?.date && item.id && item.location,
+    )
+    .map((item) => ({
+      id: item.id!,
+      title: item.summary ?? "(no title)",
+      startKey: item.start!.date!,
+      endKey: item.end!.date!, // exclusive, per Google's all-day convention
+      location: item.location!,
+    }))
+    .filter((e) => e.startKey <= todayKey && todayKey < e.endKey)
+    .sort((a, b) => a.startKey.localeCompare(b.startKey));
+
+  const allDayAnchor = allDayEvents[0];
+  if (!allDayAnchor) {
     return unavailable("no upcoming personal event with a location today");
   }
 
-  const destination = await geocodeAddress(anchor.location);
+  const destination = await geocodeAddress(allDayAnchor.location);
   if (!destination) {
-    return unavailable(`couldn't find a location for "${anchor.title}"`);
+    return unavailable(`couldn't find a location for "${allDayAnchor.title}"`);
   }
 
-  let leaveByResult;
   try {
-    leaveByResult = await computeLeaveBy(
-      anchor.start,
-      destination,
-      settings.personalArrivalBufferMinutes,
-    );
+    const eta = await getCurrentEta(origin, destination);
+    return NextResponse.json<CommutePlanResponse>({
+      mode: "personal",
+      destinationLabel: allDayAnchor.title,
+      destinationCoords: destination,
+      hero: {
+        durationMinutes: eta.durationInTrafficMinutes,
+        distanceMiles: eta.distanceMiles,
+        trafficDelayMinutes: eta.trafficDelayMinutes,
+        trafficCondition: eta.trafficCondition,
+        live: true,
+      },
+    });
   } catch (error) {
     return unavailable((error as Error).message);
   }
-
-  const tight =
-    leaveByResult.leaveBy.getTime() + leaveByResult.travelTimeMinutes * 60 * 1000 >
-    anchor.start.getTime();
-
-  return NextResponse.json<CommutePlanResponse>({
-    mode: "personal",
-    destinationLabel: anchor.title,
-    destinationCoords: destination,
-    hero: {
-      durationMinutes: leaveByResult.travelTimeMinutes,
-      distanceMiles: leaveByResult.distanceMiles,
-      trafficCondition: leaveByResult.trafficCondition,
-      live: false,
-    },
-    leaveBy: {
-      time: leaveByResult.leaveBy.toISOString(),
-      travelTimeMinutes: leaveByResult.travelTimeMinutes,
-      eventTitle: anchor.title,
-      eventStart: anchor.start.toISOString(),
-      trafficCondition: leaveByResult.trafficCondition,
-      tight,
-    },
-  });
 }
 
 // ---- Sunday: fixed destinations, live ETA only, no leave-by. ----
