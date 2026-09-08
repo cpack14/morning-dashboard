@@ -1,5 +1,7 @@
 import { getSecurityStatus, setSecurityStatus } from "@/lib/securityStatus";
 import { getSettings, setSettings, type DashboardSettings } from "@/lib/settings";
+import { getCustomAlarm, setCustomAlarm } from "@/lib/customAlarm";
+import { dayKeyInTimezone } from "@/lib/timezone";
 import { SaveSettingsButton } from "@/components/SaveSettingsButton";
 import { AlarmPreview } from "@/components/AlarmPreview";
 import Link from "next/link";
@@ -20,6 +22,13 @@ function formatHour12(hour: number): string {
   const period = hour >= 12 ? "PM" : "AM";
   const hour12 = hour % 12 === 0 ? 12 : hour % 12;
   return `${hour12}:00 ${period}`;
+}
+
+function formatHourMinute12(hour: number, minute: number): string {
+  const period = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  const minuteStr = String(minute).padStart(2, "0");
+  return `${hour12}:${minuteStr} ${period}`;
 }
 
 // Hour-only cutoffs (no minute component in the data model) get a
@@ -59,13 +68,39 @@ const inputClass =
   "rounded-lg border border-surface-border bg-surface px-3 py-2 text-foreground";
 
 export default async function SettingsPage() {
-  const [status, settings] = await Promise.all([getSecurityStatus(), getSettings()]);
+  const [status, settings, customAlarm] = await Promise.all([
+    getSecurityStatus(),
+    getSettings(),
+    getCustomAlarm(),
+  ]);
   const isAway = status === "away";
+  const todayKey = dayKeyInTimezone(new Date());
+  const pendingCustomAlarm =
+    customAlarm && customAlarm.date >= todayKey ? customAlarm : null;
+  const customAlarmDayLabel = pendingCustomAlarm?.date === todayKey ? "today" : "tomorrow";
 
   async function toggleAway() {
     "use server";
     const current = await getSecurityStatus();
     await setSecurityStatus(current === "away" ? "home" : "away");
+    revalidatePath("/away");
+  }
+
+  async function setCustomAlarmAction(formData: FormData) {
+    "use server";
+    const [hourStr, minuteStr] = String(formData.get("customAlarmTime") ?? "").split(":");
+    const hour = Number(hourStr);
+    const minute = Number(minuteStr);
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return;
+
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await setCustomAlarm({ date: dayKeyInTimezone(tomorrow), hour, minute });
+    revalidatePath("/away");
+  }
+
+  async function cancelCustomAlarmAction() {
+    "use server";
+    await setCustomAlarm(null);
     revalidatePath("/away");
   }
 
@@ -172,7 +207,36 @@ export default async function SettingsPage() {
           While set to Away, the TV won&apos;t turn on and the morning alarm
           won&apos;t fire, no matter what the calendar says.
         </p>
-        <AlarmPreview />
+        {!pendingCustomAlarm && <AlarmPreview />}
+
+        {pendingCustomAlarm ? (
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-sm text-accent-warn">
+              🔔 Custom alarm overriding {customAlarmDayLabel}:{" "}
+              {formatHourMinute12(pendingCustomAlarm.hour, pendingCustomAlarm.minute)}
+            </p>
+            <form action={cancelCustomAlarmAction}>
+              <button type="submit" className="text-xs text-muted underline">
+                Cancel custom alarm
+              </button>
+            </form>
+          </div>
+        ) : (
+          <form action={setCustomAlarmAction} className="flex items-center gap-2">
+            <input type="time" name="customAlarmTime" className={inputClass} required />
+            <button
+              type="submit"
+              className="rounded-lg bg-accent-work px-4 py-2 text-sm font-medium text-foreground"
+            >
+              Set Custom Alarm
+            </button>
+          </form>
+        )}
+        <p className="max-w-xs text-xs text-muted">
+          One-time override for tomorrow only — skips all calendar/commute
+          logic and fires at exactly this time, then reverts back to
+          automatic. Away mode still blocks it.
+        </p>
       </section>
 
       <form action={saveSettings} className="flex flex-col gap-8">

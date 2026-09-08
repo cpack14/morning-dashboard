@@ -5,6 +5,7 @@ import { fetchGoogleCalendarEvents } from "@/lib/googleCalendar";
 import { computeLeaveBy } from "@/lib/commuteLeaveBy";
 import { getSecurityStatus } from "@/lib/securityStatus";
 import { getSettings, type DashboardSettings } from "@/lib/settings";
+import { getCustomAlarm } from "@/lib/customAlarm";
 
 export const dynamic = "force-dynamic";
 
@@ -177,6 +178,21 @@ export async function GET(request: Request) {
   const targetDate = previewTomorrow
     ? new Date(now.getTime() + 24 * 60 * 60 * 1000)
     : now;
+  const targetDayKey = dayKeyInTimezone(targetDate);
+
+  // A one-time manual override always wins over the calendar/weekend
+  // logic below — that's the whole point — but still yields to Away
+  // above, since Frank won't even wake the TV screen while Away.
+  const customAlarm = await getCustomAlarm();
+  if (customAlarm && customAlarm.date === targetDayKey) {
+    const wakeTime = zonedTimeToUtc(
+      targetDayKey,
+      customAlarm.hour,
+      customAlarm.minute,
+      HOME_TIMEZONE,
+    );
+    return result(wakeTime, "custom alarm override");
+  }
 
   if (isWeekend(targetDate)) {
     if (!previewTomorrow) {
@@ -187,7 +203,7 @@ export async function GET(request: Request) {
     // so this branch exists purely to describe what will actually
     // happen tomorrow — a silent screen-on, not an alarm.
     const wakeTime = zonedTimeToUtc(
-      dayKeyInTimezone(targetDate),
+      targetDayKey,
       settings.fallbackWakeHour,
       settings.fallbackWakeMinute,
       HOME_TIMEZONE,
@@ -198,7 +214,7 @@ export async function GET(request: Request) {
   return computeMeetingBasedWake(
     now,
     settings,
-    dayKeyInTimezone(targetDate),
+    targetDayKey,
     previewTomorrow ? "tomorrow" : "today",
   );
 }
