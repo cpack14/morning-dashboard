@@ -110,23 +110,29 @@ async function computeMeetingBasedWake(
   meetings.sort((a, b) => a.start.getTime() - b.start.getTime());
   const firstMeeting = meetings[0];
 
+  // The default wake time is now a ceiling, not just an empty-calendar
+  // fallback: whatever a meeting computes to, the alarm never fires
+  // later than this — it can only ever be pulled earlier.
+  const defaultWakeTime = zonedTimeToUtc(
+    dayKey,
+    settings.defaultWakeHour,
+    settings.defaultWakeMinute,
+    HOME_TIMEZONE,
+  );
+  const capToDefault = (computed: Date) =>
+    computed.getTime() < defaultWakeTime.getTime() ? computed : defaultWakeTime;
+
   if (!firstMeeting) {
-    const wakeTime = zonedTimeToUtc(
-      dayKey,
-      settings.defaultWakeHour,
-      settings.defaultWakeMinute,
-      HOME_TIMEZONE,
-    );
-    return result(wakeTime, `no meetings ${dayLabel}, default weekday wake time`);
+    return result(defaultWakeTime, `no meetings ${dayLabel}, default weekday wake time`);
   }
 
   const isEarly = hourInTimezone(firstMeeting.start) < settings.earlyMeetingCutoffHour;
 
   if (isEarly || firstMeeting.calendar !== "work") {
-    const wakeTime = new Date(
+    const computed = new Date(
       firstMeeting.start.getTime() - settings.getReadyMinutes * 60 * 1000,
     );
-    return result(wakeTime, undefined, firstMeeting.start);
+    return result(capToDefault(computed), undefined, firstMeeting.start);
   }
 
   try {
@@ -135,12 +141,27 @@ async function computeMeetingBasedWake(
       process.env.WORK_COORDS ?? "",
       settings.workArrivalBufferMinutes,
     );
-    const wakeTime = new Date(
+    const computed = new Date(
       leaveBy.getTime() - settings.getReadyMinutes * 60 * 1000,
     );
-    return result(wakeTime, undefined, firstMeeting.start);
-  } catch (error) {
-    return result(null, (error as Error).message);
+    return result(capToDefault(computed), undefined, firstMeeting.start);
+  } catch {
+    // TomTom hiccup — assume a flat 40-minute commute rather than
+    // skipping the alarm outright; the default-time cap below still
+    // protects against this over-firing early for a late meeting.
+    const ASSUMED_COMMUTE_MINUTES = 40;
+    const computed = new Date(
+      firstMeeting.start.getTime() -
+        (settings.workArrivalBufferMinutes +
+          ASSUMED_COMMUTE_MINUTES +
+          settings.getReadyMinutes) *
+          60 * 1000,
+    );
+    return result(
+      capToDefault(computed),
+      "commute unavailable, assumed 40-minute commute",
+      firstMeeting.start,
+    );
   }
 }
 

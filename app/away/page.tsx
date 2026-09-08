@@ -2,6 +2,7 @@ import { getSecurityStatus, setSecurityStatus } from "@/lib/securityStatus";
 import { getSettings, setSettings, type DashboardSettings } from "@/lib/settings";
 import { SaveSettingsButton } from "@/components/SaveSettingsButton";
 import { AlarmPreview } from "@/components/AlarmPreview";
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 
 export const dynamic = "force-dynamic";
@@ -144,6 +145,10 @@ export default async function SettingsPage() {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col gap-10 bg-background p-8 text-foreground">
+      <Link href="/" className="text-sm text-muted underline-offset-4 hover:underline">
+        ← View dashboard
+      </Link>
+
       <section className="flex flex-col items-center gap-6 text-center">
         <p className="text-sm uppercase tracking-wide text-muted">
           Morning dashboard status
@@ -176,7 +181,7 @@ export default async function SettingsPage() {
 
           <Field
             label="Default wake time"
-            explainer="Used on days with no meetings on the calendar at all."
+            explainer="The latest the alarm ever fires. Used as-is on days with no meetings; on days with one, the alarm still fires earlier if the meeting requires it, but never later than this."
           >
             <input
               type="time"
