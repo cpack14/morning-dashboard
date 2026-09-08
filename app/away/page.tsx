@@ -1,6 +1,7 @@
 import { getSecurityStatus, setSecurityStatus } from "@/lib/securityStatus";
 import { getSettings, setSettings, type DashboardSettings } from "@/lib/settings";
 import { SaveSettingsButton } from "@/components/SaveSettingsButton";
+import { AlarmPreview } from "@/components/AlarmPreview";
 import { revalidatePath } from "next/cache";
 
 export const dynamic = "force-dynamic";
@@ -166,6 +167,7 @@ export default async function SettingsPage() {
           While set to Away, the TV won&apos;t turn on and the morning alarm
           won&apos;t fire, no matter what the calendar says.
         </p>
+        <AlarmPreview />
       </section>
 
       <form action={saveSettings} className="flex flex-col gap-8">

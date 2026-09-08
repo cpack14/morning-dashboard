@@ -4,7 +4,7 @@ import { dayKeyInTimezone, hourInTimezone, isWeekend } from "@/lib/timezone";
 import { fetchGoogleCalendarEvents } from "@/lib/googleCalendar";
 import { computeLeaveBy } from "@/lib/commuteLeaveBy";
 import { getSecurityStatus } from "@/lib/securityStatus";
-import { getSettings } from "@/lib/settings";
+import { getSettings, type DashboardSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -49,29 +49,33 @@ function zonedTimeToUtc(
   return new Date(naiveUtc.getTime() - offset);
 }
 
-function result(wakeTime: Date | null, reason?: string, meetingStart?: Date) {
+function result(
+  wakeTime: Date | null,
+  reason?: string,
+  meetingStart?: Date,
+  silent?: boolean,
+) {
   return NextResponse.json({
     wakeTime: wakeTime ? wakeTime.toISOString() : null,
     meetingStart: meetingStart ? meetingStart.toISOString() : null,
     reason,
+    silent,
   });
 }
 
-export async function GET() {
-  const now = new Date();
-  const settings = await getSettings();
-
-  if ((await getSecurityStatus()) === "away") {
-    return result(null, "away");
-  }
-
-  if (isWeekend(now)) {
-    return result(null, "weekend");
-  }
-
-  const todayKey = dayKeyInTimezone(now);
+// Shared by both "today" (the real alarm decision, polled by the TV and
+// Frank) and "tomorrow" (a settings-page preview only) — computes the
+// meeting-driven wake time for whichever day's key/label is passed in.
+// Every meeting fetched here is already guaranteed to be in the future
+// relative to `now`, whether that's later today or all of tomorrow.
+async function computeMeetingBasedWake(
+  now: Date,
+  settings: DashboardSettings,
+  dayKey: string,
+  dayLabel: "today" | "tomorrow",
+) {
   const timeMin = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-  const timeMax = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+  const timeMax = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -92,7 +96,7 @@ export async function GET() {
         for (const item of raw) {
           if (!item.start?.dateTime || !item.end?.dateTime) continue;
           const start = new Date(item.start.dateTime);
-          if (dayKeyInTimezone(start) !== todayKey) continue;
+          if (dayKeyInTimezone(start) !== dayKey) continue;
           if (start.getTime() <= now.getTime()) continue;
           meetings.push({ start, calendar: key });
         }
@@ -108,12 +112,12 @@ export async function GET() {
 
   if (!firstMeeting) {
     const wakeTime = zonedTimeToUtc(
-      todayKey,
+      dayKey,
       settings.defaultWakeHour,
       settings.defaultWakeMinute,
       HOME_TIMEZONE,
     );
-    return result(wakeTime, "no meetings today, default weekday wake time");
+    return result(wakeTime, `no meetings ${dayLabel}, default weekday wake time`);
   }
 
   const isEarly = hourInTimezone(firstMeeting.start) < settings.earlyMeetingCutoffHour;
@@ -138,4 +142,42 @@ export async function GET() {
   } catch (error) {
     return result(null, (error as Error).message);
   }
+}
+
+export async function GET(request: Request) {
+  const now = new Date();
+  const settings = await getSettings();
+  const previewTomorrow = new URL(request.url).searchParams.get("day") === "tomorrow";
+
+  if ((await getSecurityStatus()) === "away") {
+    return result(null, "away");
+  }
+
+  const targetDate = previewTomorrow
+    ? new Date(now.getTime() + 24 * 60 * 60 * 1000)
+    : now;
+
+  if (isWeekend(targetDate)) {
+    if (!previewTomorrow) {
+      return result(null, "weekend");
+    }
+    // Settings-page preview only: Frank drives weekend wake-ups itself
+    // off the fallback time directly, without ever calling this route,
+    // so this branch exists purely to describe what will actually
+    // happen tomorrow — a silent screen-on, not an alarm.
+    const wakeTime = zonedTimeToUtc(
+      dayKeyInTimezone(targetDate),
+      settings.fallbackWakeHour,
+      settings.fallbackWakeMinute,
+      HOME_TIMEZONE,
+    );
+    return result(wakeTime, "weekend", undefined, true);
+  }
+
+  return computeMeetingBasedWake(
+    now,
+    settings,
+    dayKeyInTimezone(targetDate),
+    previewTomorrow ? "tomorrow" : "today",
+  );
 }
