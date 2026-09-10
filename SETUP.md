@@ -23,11 +23,17 @@ You need one OAuth client, authorized against both Google accounts, giving you t
 3. **APIs & Services → OAuth consent screen** → External → fill in the minimum (app name, your email) → add your own Google account(s) as test users if it stays in "Testing" mode (that's fine for personal use).
 4. **APIs & Services → Credentials → Create Credentials → OAuth client ID** → type "Web application" → add `https://developers.google.com/oauthplayground` as an authorized redirect URI. Copy the client ID/secret → `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 5. Go to https://developers.google.com/oauthplayground →  gear icon (top right) → check "Use your own OAuth credentials" → paste your client ID/secret.
-6. In the left panel, find "Google Calendar API v3" → select the `https://www.googleapis.com/auth/calendar.readonly` scope → Authorize APIs → sign in with your **work** Google account → allow.
+6. For your **work** Google account, select two scopes together before authorizing: `https://www.googleapis.com/auth/calendar.events` and `https://www.googleapis.com/auth/calendar.readonly` (the write scope is for flight-sync's padded events — see 3b) → Authorize APIs → sign in with your work account → allow.
 7. Click "Exchange authorization code for tokens" → copy the **Refresh token** → `GOOGLE_WORK_REFRESH_TOKEN`.
-8. Repeat steps 6–7 signed in as your **personal** Google account → `GOOGLE_PERSONAL_REFRESH_TOKEN`.
+8. For your **personal** Google account, select three scopes together before authorizing: `https://www.googleapis.com/auth/calendar.events`, `https://www.googleapis.com/auth/calendar.readonly`, and `https://www.googleapis.com/auth/gmail.readonly` (the last is for flight-email searching — see 3b) → Authorize APIs → sign in with your personal account → allow → exchange for tokens → `GOOGLE_PERSONAL_REFRESH_TOKEN`.
 
-Refresh tokens don't expire under normal use, so this is a one-time setup per account.
+Refresh tokens don't expire under normal use, so this is a one-time setup per account. If you re-authorize an account with a different set of scopes later (e.g. adding Gmail access), the new refresh token replaces the old one — the old scopes don't carry over automatically.
+
+## 3b. Flight sync (Delta) — Vercel Cron
+
+Searches the **personal** account's Gmail for Delta flight receipts. For each flight, writes a full padded version (3h pre-flight block, the flight, 1.5h post-flight block) to the **work** calendar, and just the bare flight event (no padding) to the **personal** calendar. Both `GOOGLE_WORK_REFRESH_TOKEN` and `GOOGLE_PERSONAL_REFRESH_TOKEN` need the scopes from step 6/8 above. No separate account or API key needed beyond that. Once deployed, add a `CRON_SECRET` env var (any random string) if you want to lock down who can trigger `/api/flights/sync` — this project currently doesn't, matching the rest of the app's no-auth posture.
+
+Airports are hardcoded in `lib/airports.ts` — a flight through an airport not listed there is skipped (with a warning shown in the UI) rather than guessed at. Add new airports there as needed.
 
 ## 4. Garmin (optional, lowest priority)
 

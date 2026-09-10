@@ -3,6 +3,7 @@ import { getSettings, setSettings, type DashboardSettings } from "@/lib/settings
 import { getCustomAlarm, setCustomAlarm } from "@/lib/customAlarm";
 import { dayKeyInTimezone } from "@/lib/timezone";
 import { SaveSettingsButton } from "@/components/SaveSettingsButton";
+import { SyncFlightsButton } from "@/components/SyncFlightsButton";
 import { AlarmPreview } from "@/components/AlarmPreview";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
@@ -464,6 +465,18 @@ export default async function SettingsPage() {
 
         <SaveSettingsButton />
       </form>
+
+      <section className="flex flex-col gap-4">
+        <h2 className="text-lg font-semibold">Flights</h2>
+        <p className="text-xs text-muted">
+          Checks personal email for new Delta flight receipts. Adds each
+          flight to the work calendar with a 2-hour &quot;Airport&quot; block
+          before it and a 1.5-hour one after it lands, and to the personal
+          calendar as just the flight itself, no padding. Also runs
+          automatically once a day.
+        </p>
+        <SyncFlightsButton />
+      </section>
     </main>
   );
 }

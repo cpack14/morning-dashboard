@@ -67,3 +67,37 @@ export async function fetchGoogleCalendarEvents(
   const data = await res.json();
   return data.items ?? [];
 }
+
+export type NewCalendarEvent = {
+  summary: string;
+  description?: string;
+  location?: string;
+  start: { dateTime: string; timeZone: string };
+  end: { dateTime: string; timeZone: string };
+};
+
+export async function createGoogleCalendarEvent(
+  refreshToken: string,
+  event: NewCalendarEvent,
+): Promise<RawCalendarEvent> {
+  const accessToken = await getGoogleAccessToken(refreshToken);
+
+  const res = await fetch(
+    "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(event),
+      cache: "no-store",
+    },
+  );
+
+  if (!res.ok) {
+    throw new Error(`Calendar event creation failed (${res.status})`);
+  }
+
+  return res.json();
+}
