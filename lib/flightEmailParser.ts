@@ -11,6 +11,12 @@ export type ParsedLeg = {
   arrival: Date | null;
   durationMinutes: number | null;
   unknownAirportCode: string | null;
+  // A "DEPARTARRIVE" header can cover more than one flight segment —
+  // a connection. These mark the boundaries of that group so the
+  // caller only pads before the first segment and after the last,
+  // never between connecting segments.
+  isFirstInGroup: boolean;
+  isLastInGroup: boolean;
 };
 
 export type ParsedItinerary = {
@@ -18,19 +24,22 @@ export type ParsedItinerary = {
   legs: ParsedLeg[];
 };
 
+// Keyed upper-case — the header's month text is all-caps
+// ("17NOVDEPARTARRIVE") while the baggage section's is title-case
+// ("17 Nov 2026"), so every lookup below normalizes to this.
 const MONTHS: Record<string, string> = {
-  Jan: "01",
-  Feb: "02",
-  Mar: "03",
-  Apr: "04",
-  May: "05",
-  Jun: "06",
-  Jul: "07",
-  Aug: "08",
-  Sep: "09",
-  Oct: "10",
-  Nov: "11",
-  Dec: "12",
+  JAN: "01",
+  FEB: "02",
+  MAR: "03",
+  APR: "04",
+  MAY: "05",
+  JUN: "06",
+  JUL: "07",
+  AUG: "08",
+  SEP: "09",
+  OCT: "10",
+  NOV: "11",
+  DEC: "12",
 };
 
 // Delta's plain-text emails are a flattened HTML table — most "cells"
@@ -57,8 +66,12 @@ function to24Hour(time12h: string): { hour: number; minute: number } {
   return { hour, minute };
 }
 
-// Schedule blocks look like (after compacting):
-//   17NOVDEPARTARRIVE
+// Marks the start of each travel day's block, e.g. "17NOVDEPARTARRIVE"
+// — one of these can be followed by more than one flight segment when
+// it's a connection.
+const GROUP_HEADER_RE = /(\d{1,2})([A-Z]{3})DEPARTARRIVE/g;
+
+// A single flight segment, e.g. (after compacting):
 //   DELTA 1095
 //   Delta Comfort Classic (S)
 //   SALT LAKE CITY
@@ -68,16 +81,26 @@ function to24Hour(time12h: string): { hour: number; minute: number } {
 // Cabin line varies by fare — "Delta Comfort Classic (S)", "Delta
 // Main (U)", etc. — so it's matched loosely by shape (starts with
 // "Delta", ends with a single-letter fare code in parens) rather than
-// requiring any specific fare name.
-const LEG_SCHEDULE_RE =
-  /\d{1,2}[A-Z]{3}DEPARTARRIVE\nDELTA (\d+)\nDelta [^\n]*\([A-Z]\)\n[A-Z /-]+\n(\d{1,2}:\d{2}(?:AM|PM))\n[A-Z /-]+\n(\d{1,2}:\d{2}(?:AM|PM))/g;
+// requiring any specific fare name. A trailing "*" on the flight
+// number (codeshare footnote marker, e.g. "DELTA 4153*") is dropped.
+const SEGMENT_RE =
+  /DELTA (\d+)\*?\nDelta [^\n]*\([A-Z]\)\n[A-Z /-]+\n(\d{1,2}:\d{2}(?:AM|PM))\n[A-Z /-]+\n(\d{1,2}:\d{2}(?:AM|PM))/g;
 
-// The "Checked Bag Allowance" section restates each leg with a full
-// date (year included) and the actual 3-letter airport codes, e.g.
-// "Tue 17 Nov 2026SLC-LAX" — the only place in the email either of
-// those appears.
-const LEG_DATE_CODE_RE =
-  /\w{3} (\d{1,2}) (\w{3}) (\d{4})([A-Z]{3})-([A-Z]{3})/g;
+// "Fare Details: SLC DL X/ATL DL SAV Q27.91 ... DL X/ATL DL SLC258.60 ...END"
+// — a fare-construction string that's the one reliable source of the
+// *exact* per-segment routing, including connection points ("X/ATL")
+// that the "Checked Bag Allowance" section sometimes collapses out of
+// existence when a connection shares one bag allowance for the whole
+// day. Present in every itinerary email, direct or connecting.
+const FARE_DETAILS_RE = /Fare Details:\s*([\s\S]*?)END/;
+const WAYPOINT_RE = /(?:^|DL)\s*X?\/?([A-Z]{3})/g;
+
+// The "Checked Bag Allowance" section restates each travel day with a
+// full date (year included), e.g. "Tue 17 Nov 2026SLC-LAX" — the only
+// place a year appears in the email. Its airport codes aren't used
+// (see above); only the date, matched to a DEPARTARRIVE header by
+// day+month.
+const DATE_ROW_RE = /\w{3} (\d{1,2}) (\w{3}) (\d{4})[A-Z]{3}-[A-Z]{3}/g;
 
 export type ParseFailure = { reason: string };
 
@@ -91,31 +114,60 @@ export function parseDeltaFlightReceipt(
     return { reason: "couldn't find a confirmation number" };
   }
 
-  const schedules = [...compact.matchAll(LEG_SCHEDULE_RE)];
-  const dateCodes = [...compact.matchAll(LEG_DATE_CODE_RE)];
+  const headers = [...compact.matchAll(GROUP_HEADER_RE)];
+  const segments = [...compact.matchAll(SEGMENT_RE)];
 
-  if (schedules.length === 0) {
+  if (segments.length === 0) {
     return { reason: "couldn't find any flight segments" };
   }
 
-  if (schedules.length !== dateCodes.length) {
-    // A day with more baggage-section legs than schedule-section
-    // blocks means a connecting flight (multiple segments under one
-    // DEPARTARRIVE header) — not supported yet, rather than guessed at.
-    return {
-      reason:
-        dateCodes.length > schedules.length
-          ? "looks like a connecting flight (multiple segments in one day) — not supported yet"
-          : "flight segment count didn't match between sections of the email",
-    };
+  const fareDetailsMatch = compact.match(FARE_DETAILS_RE);
+  if (!fareDetailsMatch) {
+    return { reason: "couldn't find the fare details routing string" };
+  }
+  const waypoints = [...fareDetailsMatch[1].matchAll(WAYPOINT_RE)].map((m) => m[1]);
+  if (waypoints.length !== segments.length + 1) {
+    return { reason: "routing string didn't match the number of flight segments" };
   }
 
-  const legs: ParsedLeg[] = schedules.map((schedule, i) => {
-    const [, flightNumber, departureTime, arrivalTime] = schedule;
-    const [, day, monthName, year, originCode, destCode] = dateCodes[i];
+  // Header months are all-caps ("17NOVDEPARTARRIVE"); baggage-section
+  // months are title-case ("17 Nov 2026") — normalized to match.
+  const dateRows = [...compact.matchAll(DATE_ROW_RE)];
+  const yearByDayMonth = new Map<string, string>();
+  for (const [, day, monthName, year] of dateRows) {
+    yearByDayMonth.set(`${day.padStart(2, "0")}-${monthName.toUpperCase()}`, year);
+  }
+  for (const [, headerDay, headerMonth] of headers) {
+    if (!yearByDayMonth.has(`${headerDay.padStart(2, "0")}-${headerMonth.toUpperCase()}`)) {
+      return { reason: "couldn't find a year for one of the travel days" };
+    }
+  }
 
-    const month = MONTHS[monthName];
-    const dateKey = `${year}-${month}-${day.padStart(2, "0")}`;
+  // Each segment belongs to the most recent header that precedes it.
+  const groupIndexes = segments.map((segment) => {
+    let group = -1;
+    for (const header of headers) {
+      if ((header.index ?? 0) < (segment.index ?? 0)) group++;
+      else break;
+    }
+    return group;
+  });
+
+  let previousArrival: Date | null = null;
+
+  const legs: ParsedLeg[] = segments.map((segment, i) => {
+    const [, flightNumber, departureTime, arrivalTime] = segment;
+    const originCode = waypoints[i];
+    const destCode = waypoints[i + 1];
+
+    const isFirstInGroup = i === 0 || groupIndexes[i] !== groupIndexes[i - 1];
+    const isLastInGroup =
+      i === segments.length - 1 || groupIndexes[i] !== groupIndexes[i + 1];
+
+    const header = headers[groupIndexes[i]];
+    const [, headerDay, headerMonth] = header;
+    // Guaranteed present — checked for every header before this map.
+    const year = yearByDayMonth.get(`${headerDay.padStart(2, "0")}-${headerMonth.toUpperCase()}`)!;
 
     const origin = AIRPORTS[originCode];
     const dest = AIRPORTS[destCode];
@@ -130,24 +182,41 @@ export function parseDeltaFlightReceipt(
         arrival: null,
         durationMinutes: null,
         unknownAirportCode,
+        isFirstInGroup,
+        isLastInGroup,
       };
     }
+
+    const month = MONTHS[headerMonth.toUpperCase()];
+    let dateKey = `${year}-${month}-${headerDay.padStart(2, "0")}`;
 
     const depTime = to24Hour(departureTime);
     const arrTime = to24Hour(arrivalTime);
 
-    const departure = zonedTimeToUtc(dateKey, depTime.hour, depTime.minute, origin.timezone);
+    let departure = zonedTimeToUtc(dateKey, depTime.hour, depTime.minute, origin.timezone);
+
+    // No date is given per-segment, only per travel day — if this
+    // segment's departure would be before the previous segment's
+    // arrival (an overnight layover), it's actually the next day.
+    if (previousArrival && departure.getTime() < previousArrival.getTime()) {
+      const nextDay = new Date(departure.getTime());
+      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+      dateKey = nextDay.toISOString().slice(0, 10);
+      departure = zonedTimeToUtc(dateKey, depTime.hour, depTime.minute, origin.timezone);
+    }
+
     let arrival = zonedTimeToUtc(dateKey, arrTime.hour, arrTime.minute, dest.timezone);
 
-    // No arrival date is given separately — if treating it as the same
-    // calendar day as departure puts it before departure, the flight
-    // must cross midnight, so try the next day instead.
+    // Same idea within a single segment — if the arrival time reads as
+    // before departure on the same date, the flight crosses midnight.
     if (arrival.getTime() < departure.getTime()) {
       const nextDay = new Date(departure.getTime());
       nextDay.setUTCDate(nextDay.getUTCDate() + 1);
       const nextDateKey = nextDay.toISOString().slice(0, 10);
       arrival = zonedTimeToUtc(nextDateKey, arrTime.hour, arrTime.minute, dest.timezone);
     }
+
+    previousArrival = arrival;
 
     const durationMinutes = Math.round((arrival.getTime() - departure.getTime()) / 60000);
 
@@ -159,6 +228,8 @@ export function parseDeltaFlightReceipt(
       arrival,
       durationMinutes,
       unknownAirportCode: null,
+      isFirstInGroup,
+      isLastInGroup,
     };
   });
 

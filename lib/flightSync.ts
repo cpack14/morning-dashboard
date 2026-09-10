@@ -36,8 +36,10 @@ function formatDuration(minutes: number): string {
   return `${h}h ${m}m`;
 }
 
-// The full treatment: a 3-hour pre-flight block, the flight itself,
-// and a 1.5-hour post-flight block — written to the work calendar.
+// The full treatment: a pre-flight block before the first segment of
+// a connection, the flight(s) themselves, and a post-flight block
+// after the last segment — written to the work calendar. Nothing
+// between connecting segments, since you're already at the airport.
 async function createPaddedEventsForLeg(
   refreshToken: string,
   leg: ParsedLeg,
@@ -51,25 +53,29 @@ async function createPaddedEventsForLeg(
   const dest = AIRPORTS[leg.destCode];
   let created = 0;
 
-  const preStart = new Date(leg.departure.getTime() - PRE_FLIGHT_BUFFER_MINUTES * 60000);
-  await createGoogleCalendarEvent(refreshToken, {
-    summary: "Airport",
-    description: `Heading to ${origin.name} for ${leg.flightNumber} (confirmation ${confirmationNumber})`,
-    start: { dateTime: preStart.toISOString(), timeZone: origin.timezone },
-    end: { dateTime: leg.departure.toISOString(), timeZone: origin.timezone },
-  });
-  created++;
+  if (leg.isFirstInGroup) {
+    const preStart = new Date(leg.departure.getTime() - PRE_FLIGHT_BUFFER_MINUTES * 60000);
+    await createGoogleCalendarEvent(refreshToken, {
+      summary: "Airport",
+      description: `Heading to ${origin.name} for ${leg.flightNumber} (confirmation ${confirmationNumber})`,
+      start: { dateTime: preStart.toISOString(), timeZone: origin.timezone },
+      end: { dateTime: leg.departure.toISOString(), timeZone: origin.timezone },
+    });
+    created++;
+  }
 
   created += await createFlightEvent(refreshToken, leg, confirmationNumber);
 
-  const postEnd = new Date(leg.arrival.getTime() + POST_FLIGHT_BUFFER_MINUTES * 60000);
-  await createGoogleCalendarEvent(refreshToken, {
-    summary: "Airport",
-    description: `Arrived via ${leg.flightNumber} (confirmation ${confirmationNumber})`,
-    start: { dateTime: leg.arrival.toISOString(), timeZone: dest.timezone },
-    end: { dateTime: postEnd.toISOString(), timeZone: dest.timezone },
-  });
-  created++;
+  if (leg.isLastInGroup) {
+    const postEnd = new Date(leg.arrival.getTime() + POST_FLIGHT_BUFFER_MINUTES * 60000);
+    await createGoogleCalendarEvent(refreshToken, {
+      summary: "Airport",
+      description: `Arrived via ${leg.flightNumber} (confirmation ${confirmationNumber})`,
+      start: { dateTime: leg.arrival.toISOString(), timeZone: dest.timezone },
+      end: { dateTime: postEnd.toISOString(), timeZone: dest.timezone },
+    });
+    created++;
+  }
 
   return created;
 }
